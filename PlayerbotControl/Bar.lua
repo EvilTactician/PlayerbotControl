@@ -23,10 +23,14 @@ local buttons = {}  -- [action id] = button
 -- Which buttons show
 -------------------------------------------------------------------------------
 
--- A button is left out when it's switched off in the options, or when the
--- server has said it doesn't support what the button needs.
+-- A button is left out when it's switched off in the options, when the
+-- server module it belongs to didn't answer, or when the server has said it
+-- doesn't support what the button needs.
 local function isShown(action)
     if PBC.db.hidden[action.id] then
+        return false
+    end
+    if action.module and PBC.modules[action.module] ~= true then
         return false
     end
     if action.caps then
@@ -302,6 +306,11 @@ local function refreshAction(button)
         button.glow:Show()
     else
         button.glow:Hide()
+    end
+    -- A number while a job works through the bots one by one: how many left.
+    local busy = PBC.busy[action.id]
+    if type(busy) == "number" then
+        corner = busy
     end
     button.corner:SetText(usable and corner or "")
 

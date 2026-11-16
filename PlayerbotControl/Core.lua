@@ -19,7 +19,7 @@ local defaults = {
     growDown = false,   -- groups open upwards unless this is set
     skull = true,       -- Attack also puts the Skull marker on the target
     confirm = false,    -- print a line in chat when an order succeeds
-    open = { movement = false, combat = false },
+    open = { movement = false, combat = false, group = false, upkeep = false },
     hidden = {},        -- [action id] = true for buttons switched off
     minimap = { show = true, angle = 200 },
 }
@@ -190,6 +190,9 @@ events:SetScript("OnEvent", function(self, event, ...)
             enteredWorld = true
             PBC:After(2, function()
                 PBC.Bridge:Hello(true)
+            end)
+            PBC:After(4, function()
+                PBC:ProbeModules()
             end)
             -- The group isn't known for the first moments after loading.
             PBC:After(5, function()

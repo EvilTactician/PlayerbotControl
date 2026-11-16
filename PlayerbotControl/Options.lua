@@ -140,7 +140,7 @@ function Options:Create()
     local column = 0
     for _, group in ipairs(PBC.groups) do
         local groupLabel = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-        groupLabel:SetPoint("TOPLEFT", buttonsHeading, "BOTTOMLEFT", column * 190, -8)
+        groupLabel:SetPoint("TOPLEFT", buttonsHeading, "BOTTOMLEFT", column * 150, -8)
         groupLabel:SetText(group.name)
 
         local previous = groupLabel
