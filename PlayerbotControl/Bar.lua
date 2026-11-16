@@ -1,8 +1,10 @@
 -- Playerbot Control: the bar itself.
 --
--- A row of group buttons, with each open group's buttons stacked above (or
--- below) it. Nothing here runs on a timer: the bar is only redrawn when a
--- setting, the bridge status or the bots' state changes.
+-- One button per group. A group's primary action (its toggle) sits on the bar
+-- itself: left-click uses it, right-click opens the rest of the group, stacked
+-- above (or below) it. A group without a primary gets a plain group button
+-- that opens on left-click. Nothing here runs on a timer: the bar is only
+-- redrawn when a setting, the bridge status or the bots' state changes.
 
 local PBC = PlayerbotControl
 local Bridge = PBC.Bridge
@@ -109,6 +111,15 @@ local function actionTooltip(button)
         else
             action.Tooltip(tooltip)
         end
+        -- Set while this button is its group's button on the bar.
+        local group = button.flyout
+        if group then
+            if PBC.db.open[group.id] then
+                tooltip:AddLine("Right-click: hide the other " .. group.name .. " buttons", 1, 0.82, 0)
+            else
+                tooltip:AddLine("Right-click: show the other " .. group.name .. " buttons", 1, 0.82, 0)
+            end
+        end
     end)
 end
 
@@ -120,12 +131,16 @@ local function getActionButton(action)
     button = newButton(Bar.frame)
     button.action = action
     button:SetScript("OnClick", function(self, mouseButton)
-        if not isUsable(action) then
+        if mouseButton == "RightButton" and self.flyout then
+            PBC.db.open[self.flyout.id] = not PBC.db.open[self.flyout.id]
+            Bar:Refresh()
+        elseif not isUsable(action) then
             Bridge:Hello()
             PBC:Print(action.name .. ": " .. Bridge:StatusText())
             return
+        else
+            action.Click(mouseButton)
         end
-        action.Click(mouseButton)
         if GameTooltip:IsOwned(self) then
             actionTooltip(self)
         end
@@ -140,11 +155,10 @@ local function headerTooltip(button)
     showTooltip(button, function(tooltip)
         tooltip:AddLine(group.name)
         if PBC.db.open[group.id] then
-            tooltip:AddLine("Left-click: close this group", 1, 1, 1)
+            tooltip:AddLine("Click: hide these buttons", 1, 1, 1)
         else
-            tooltip:AddLine("Left-click: open this group", 1, 1, 1)
+            tooltip:AddLine("Click: show these buttons", 1, 1, 1)
         end
-        tooltip:AddLine("Right-click: options", 1, 1, 1)
     end)
 end
 
@@ -164,11 +178,7 @@ local function getHeader(group)
     frame:SetHeight(SIZE * 1.72)
     frame:SetPoint("CENTER", button, "CENTER", 0, -1)
 
-    button:SetScript("OnClick", function(self, mouseButton)
-        if mouseButton == "RightButton" then
-            PBC.Options:Open()
-            return
-        end
+    button:SetScript("OnClick", function(self)
         PBC.db.open[group.id] = not PBC.db.open[group.id]
         Bar:Refresh()
         if GameTooltip:IsOwned(self) then
@@ -310,6 +320,12 @@ function Bar:Refresh()
         return
     end
 
+    if not PBC.db.shown then
+        frame:Hide()
+        return
+    end
+    frame:Show()
+
     local growDown = PBC.db.growDown
     local x = 0
 
@@ -321,36 +337,45 @@ function Bar:Refresh()
     end
 
     for _, button in pairs(buttons) do
+        button.flyout = nil
         button:Hide()
+    end
+    for _, header in pairs(headers) do
+        header:Hide()
     end
 
     for _, group in ipairs(PBC.groups) do
+        local primary
         local members = {}
         for _, action in ipairs(PBC.actions) do
             if action.group == group.id and isShown(action) then
-                members[#members + 1] = action
+                if action.id == group.primary then
+                    primary = action
+                else
+                    members[#members + 1] = action
+                end
             end
         end
 
-        local header = headers[group.id]
-        if #members == 0 then
-            if header then
-                header:Hide()
-            end
-        else
-            header = getHeader(group)
-            header:ClearAllPoints()
-            header:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", x, 0)
-            header:Show()
-
-            local open = PBC.db.open[group.id]
-            if open then
-                header:LockHighlight()
+        if primary or #members > 0 then
+            local anchor
+            if primary then
+                anchor = getActionButton(primary)
+                anchor.flyout = (#members > 0) and group or nil
+                refreshAction(anchor)
             else
-                header:UnlockHighlight()
+                anchor = getHeader(group)
+                if PBC.db.open[group.id] then
+                    anchor:LockHighlight()
+                else
+                    anchor:UnlockHighlight()
+                end
             end
+            anchor:ClearAllPoints()
+            anchor:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", x, 0)
+            anchor:Show()
 
-            if open then
+            if PBC.db.open[group.id] then
                 for index, action in ipairs(members) do
                     local button = getActionButton(action)
                     local offset = index * (SIZE + GAP)

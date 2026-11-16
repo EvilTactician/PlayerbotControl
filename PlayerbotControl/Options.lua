@@ -80,17 +80,29 @@ function Options:Create()
     end)
     self.slider = slider
 
+    local shown = addCheck(panel, "Show the bar",
+        "The minimap button and /pbc toggle switch this too.",
+        function() return PBC.db.shown end,
+        function(value) PBC.db.shown = value end)
+    shown:SetPoint("TOPLEFT", slider, "BOTTOMLEFT", -4, -22)
+
     local lock = addCheck(panel, "Lock the bar in place",
         "Hides the grip on the left of the bar so it can't be dragged.",
         function() return PBC.db.locked end,
         function(value) PBC.db.locked = value end)
-    lock:SetPoint("TOPLEFT", slider, "BOTTOMLEFT", -4, -22)
+    lock:SetPoint("TOPLEFT", shown, "BOTTOMLEFT", 0, -4)
 
     local down = addCheck(panel, "Open groups downwards",
         "A group's buttons appear below the bar instead of above it.",
         function() return PBC.db.growDown end,
         function(value) PBC.db.growDown = value end)
     down:SetPoint("TOPLEFT", lock, "BOTTOMLEFT", 0, -4)
+
+    local minimap = addCheck(panel, "Show the minimap button",
+        "Left-click it to show or hide the bar, right-click it for these options. Drag it to move it around the minimap.",
+        function() return PBC.db.minimap.show end,
+        function(value) PBC.db.minimap.show = value end)
+    minimap:SetPoint("TOPLEFT", down, "BOTTOMLEFT", 0, -4)
 
     local reset = CreateFrame("Button", newName("Button"), panel, "UIPanelButtonTemplate")
     reset:SetWidth(140)
@@ -105,7 +117,7 @@ function Options:Create()
     -- Behaviour --------------------------------------------------------------
 
     local behaviourHeading = addHeading(panel, "Behaviour")
-    behaviourHeading:SetPoint("TOPLEFT", down, "BOTTOMLEFT", 0, -16)
+    behaviourHeading:SetPoint("TOPLEFT", minimap, "BOTTOMLEFT", 0, -16)
 
     local skull = addCheck(panel, "Attack also marks the target with Skull",
         "Bots focus the Skull marker by default, so this keeps them on your target.",

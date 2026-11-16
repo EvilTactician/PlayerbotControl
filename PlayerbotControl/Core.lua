@@ -14,12 +14,14 @@ PBC.state = {}
 
 local defaults = {
     scale = 1,
+    shown = true,       -- the whole bar; the minimap button switches it
     locked = false,
     growDown = false,   -- groups open upwards unless this is set
     skull = true,       -- Attack also puts the Skull marker on the target
     confirm = false,    -- print a line in chat when an order succeeds
-    open = { movement = true, combat = true },
+    open = { movement = false, combat = false },
     hidden = {},        -- [action id] = true for buttons switched off
+    minimap = { show = true, angle = 200 },
 }
 
 -- A /reload keeps the last known state; logging in again doesn't.
@@ -91,9 +93,17 @@ function PBC:Refresh()
     if self.Bar and self.Bar.Refresh then
         self.Bar:Refresh()
     end
+    if self.MinimapButton and self.MinimapButton.Refresh then
+        self.MinimapButton:Refresh()
+    end
     if self.Options and self.Options.Refresh then
         self.Options:Refresh()
     end
+end
+
+function PBC:ToggleBar()
+    self.db.shown = not self.db.shown
+    self:Refresh()
 end
 
 function PBC:ResetState()
@@ -173,6 +183,7 @@ events:SetScript("OnEvent", function(self, event, ...)
         end
     elseif event == "PLAYER_LOGIN" then
         PBC.Bar:Create()
+        PBC.MinimapButton:Create()
         PBC.Options:Create()
     elseif event == "PLAYER_ENTERING_WORLD" then
         if not enteredWorld then
@@ -212,9 +223,15 @@ SlashCmdList["PLAYERBOTCONTROL"] = function(input)
         PBC.db.locked = false
         PBC:Refresh()
         PBC:Print("Bar unlocked. Drag the grip on its left to move it.")
+    elseif cmd == "toggle" then
+        PBC:ToggleBar()
+    elseif cmd == "show" or cmd == "hide" then
+        PBC.db.shown = (cmd == "show")
+        PBC:Refresh()
     elseif cmd == "reset" then
         PBC.db.pos = nil
         PBC.db.scale = 1
+        PBC.db.shown = true
         PBC.Bar:ApplyPosition()
         PBC:Refresh()
         PBC:Print("Bar moved back to the middle of the screen at normal size.")
@@ -223,6 +240,6 @@ SlashCmdList["PLAYERBOTCONTROL"] = function(input)
     elseif cmd == "" or cmd == "options" or cmd == "config" then
         PBC.Options:Open()
     else
-        PBC:Print("/pbc (options), /pbc lock, /pbc unlock, /pbc reset, /pbc status")
+        PBC:Print("/pbc (options), /pbc toggle, /pbc show, /pbc hide, /pbc lock, /pbc unlock, /pbc reset, /pbc status")
     end
 end

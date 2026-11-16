@@ -9,6 +9,9 @@
 --   Visual()  returns icon, r, g, b, corner text (colour and text may be nil)
 --   Tooltip(tooltip)  adds its lines under the name
 --   Click(mouseButton)
+--
+-- A group may name one action as its "primary". That one sits on the bar
+-- itself: left-click uses it, right-click opens the rest of the group.
 
 local PBC = PlayerbotControl
 local Bridge = PBC.Bridge
@@ -19,8 +22,8 @@ local SKULL = 8
 local MOON = 5
 
 PBC.groups = {
-    { id = "movement", name = "Movement", icon = ICONS .. "Ability_Rogue_FleetFooted" },
-    { id = "combat",   name = "Combat",   icon = ICONS .. "Ability_Warrior_BattleShout" },
+    { id = "movement", name = "Movement", icon = ICONS .. "Ability_Rogue_FleetFooted",   primary = "followstay" },
+    { id = "combat",   name = "Combat",   icon = ICONS .. "Ability_Warrior_BattleShout", primary = "passive" },
 }
 
 PBC.actions = {}
@@ -98,13 +101,21 @@ end
 
 local function sendPassive(on, callback)
     local change = (on and "+" or "-") .. "passive"
-    Bridge:GroupStrategy("C", change, function(ok, reason, matched, succeeded, failed)
-        if not ok then
+    local first
+
+    -- Both go out together; report once, with the worse of the two results.
+    local function done(ok, reason, matched, succeeded, failed)
+        if not first then
+            first = { ok, reason, matched, succeeded, failed }
+        elseif not first[1] then
+            callback(unpack(first))
+        else
             callback(ok, reason, matched, succeeded, failed)
-            return
         end
-        Bridge:GroupStrategy("N", change, callback)
-    end)
+    end
+
+    Bridge:GroupStrategy("C", change, done)
+    Bridge:GroupStrategy("N", change, done)
 end
 
 -------------------------------------------------------------------------------
@@ -113,12 +124,15 @@ end
 
 -- Playerbots clears passive on every Follow or Stay order. When the Passive
 -- button is on, put it straight back so the button keeps telling the truth.
-local function afterMovementOrder()
-    if PBC.state.passive then
-        sendPassive(true, function(ok, reason, matched, succeeded)
-            if not ok then
+-- It is sent right behind the order, without waiting for the answer, so the
+-- bots get no moment in between to start a fight.
+local function restorePassive()
+    if PBC.state.passive and Bridge:IsReady() then
+        sendPassive(true, function(ok, reason)
+            -- No bots to hear it is the order's own failure, reported there.
+            if not ok and reason ~= "NO_MATCH" and reason ~= "NO_BOTS" and reason ~= "NO_GROUP" then
                 PBC.state.passive = nil
-                report("Passive", ok, reason, matched, succeeded)
+                report("Passive", ok, reason, 0, 0)
             end
             PBC:Refresh()
         end)
@@ -134,7 +148,6 @@ local function order(id, name, mode)
         PBC.busy[id] = nil
         if ok then
             PBC.state.mode = mode
-            afterMovementOrder()
         end
         report(name, ok, reason, matched, succeeded)
         PBC:Refresh()
@@ -144,6 +157,7 @@ local function order(id, name, mode)
     else
         Bridge:StayOrder(done)
     end
+    restorePassive()
 end
 
 add({
@@ -168,22 +182,25 @@ add({
         if mode == "follow" then
             tooltip:AddLine("Your bots are following you.", 0.2, 1, 0.2)
             tooltip:AddLine("Left-click: Stay", 1, 1, 1)
-            tooltip:AddLine("Right-click: repeat Follow, for bots that just joined", 1, 1, 1)
+            tooltip:AddLine("Shift-click: repeat Follow, for bots that just joined", 1, 1, 1)
         elseif mode == "stay" then
             tooltip:AddLine("Your bots are staying where they are.", 1, 0.6, 0)
             tooltip:AddLine("Left-click: Follow", 1, 1, 1)
-            tooltip:AddLine("Right-click: repeat Stay, for bots that just joined", 1, 1, 1)
+            tooltip:AddLine("Shift-click: repeat Stay, for bots that just joined", 1, 1, 1)
         elseif mode == "flee" then
             tooltip:AddLine("Your bots are fleeing to you.", 1, 0.2, 0.2)
-            tooltip:AddLine("Click: Follow, and fight again", 1, 1, 1)
+            tooltip:AddLine("Left-click: Follow, and fight again", 1, 1, 1)
         else
             tooltip:AddLine("No order given yet this session.", 0.7, 0.7, 0.7)
-            tooltip:AddLine("Click: Follow", 1, 1, 1)
+            tooltip:AddLine("Left-click: Follow", 1, 1, 1)
         end
     end,
     Click = function(mouseButton)
+        if mouseButton ~= "LeftButton" then
+            return
+        end
         local mode = PBC.state.mode
-        if mouseButton == "RightButton" then
+        if IsShiftKeyDown() then
             if mode == "stay" then
                 order("followstay", "Stay", "stay")
             else
@@ -194,31 +211,6 @@ add({
         else
             order("followstay", "Follow", "follow")
         end
-    end,
-})
-
-add({
-    id = "summon",
-    group = "movement",
-    name = "Summon",
-    caps = { "GROUP_ACTION_V1" },
-    bridge = true,
-    Visual = function()
-        return ICONS .. "Spell_Shadow_Twilight"
-    end,
-    Tooltip = function(tooltip)
-        tooltip:AddLine("Brings the bots in your group to you.", 1, 1, 1, true)
-    end,
-    Click = function()
-        if PBC.busy.summon or not needGroup("Summon") then
-            return
-        end
-        setBusy("summon", true)
-        Bridge:GroupAction("SUMMON", function(ok, reason, matched, succeeded)
-            PBC.busy.summon = nil
-            report("Summon", ok, reason, matched, succeeded)
-            PBC:Refresh()
-        end)
     end,
 })
 
@@ -245,6 +237,31 @@ add({
                 PBC.state.mode = "flee"
             end
             report("Flee", ok, reason, matched, succeeded)
+            PBC:Refresh()
+        end)
+    end,
+})
+
+add({
+    id = "summon",
+    group = "movement",
+    name = "Summon",
+    caps = { "GROUP_ACTION_V1" },
+    bridge = true,
+    Visual = function()
+        return ICONS .. "Spell_Shadow_Twilight"
+    end,
+    Tooltip = function(tooltip)
+        tooltip:AddLine("Brings the bots in your group to you.", 1, 1, 1, true)
+    end,
+    Click = function()
+        if PBC.busy.summon or not needGroup("Summon") then
+            return
+        end
+        setBusy("summon", true)
+        Bridge:GroupAction("SUMMON", function(ok, reason, matched, succeeded)
+            PBC.busy.summon = nil
+            report("Summon", ok, reason, matched, succeeded)
             PBC:Refresh()
         end)
     end,
@@ -290,20 +307,23 @@ add({
         if passive == true then
             tooltip:AddLine("Your bots are passive: they won't fight.", 0.3, 0.6, 1)
             tooltip:AddLine("Left-click: Active", 1, 1, 1)
-            tooltip:AddLine("Right-click: repeat Passive, for bots that just joined", 1, 1, 1)
+            tooltip:AddLine("Shift-click: repeat Passive, for bots that just joined", 1, 1, 1)
         elseif passive == false then
             tooltip:AddLine("Your bots are active: they fight.", 1, 0.25, 0.2)
             tooltip:AddLine("Left-click: Passive", 1, 1, 1)
-            tooltip:AddLine("Right-click: repeat Active, for bots that just joined", 1, 1, 1)
+            tooltip:AddLine("Shift-click: repeat Active, for bots that just joined", 1, 1, 1)
         else
             tooltip:AddLine("Not set yet this session. Bots are active unless told otherwise.", 0.7, 0.7, 0.7, true)
             tooltip:AddLine("Left-click: Passive", 1, 1, 1)
-            tooltip:AddLine("Right-click: Active", 1, 1, 1)
+            tooltip:AddLine("Shift-click: Active", 1, 1, 1)
         end
     end,
     Click = function(mouseButton)
+        if mouseButton ~= "LeftButton" then
+            return
+        end
         local passive = PBC.state.passive and true or false
-        if mouseButton == "RightButton" then
+        if IsShiftKeyDown() then
             setPassive(passive)
         else
             setPassive(not passive)
@@ -343,6 +363,15 @@ add({
         setBusy("attack", true)
         Bridge:AttackOrder(function(ok, reason, matched, succeeded)
             PBC.busy.attack = nil
+            if not ok and reason == "FAILED" and matched > 0 then
+                -- A bot that is already on this target counts as a refusal on
+                -- the server, so mid-fight this is the normal answer.
+                if not UnitAffectingCombat("target") then
+                    PBC:Print("Attack: your bots couldn't attack that target. It may be out of their sight.")
+                end
+                PBC:Refresh()
+                return
+            end
             report("Attack", ok, reason, matched, succeeded)
             PBC:Refresh()
         end)
