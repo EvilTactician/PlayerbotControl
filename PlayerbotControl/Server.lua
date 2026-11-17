@@ -125,3 +125,83 @@ function PBC:Confirm(text, button, fn)
     StaticPopupDialogs["PLAYERBOTCONTROL_CONFIRM"].button1 = button or "Yes"
     StaticPopup_Show("PLAYERBOTCONTROL_CONFIRM", text, nil, fn)
 end
+
+-------------------------------------------------------------------------------
+-- Raid and dungeon lockouts
+--
+-- Game masters can use the core's ".instance unbind all". Everyone else needs
+-- mod-levelsync's ".levelsync unbindall", which the server has to allow. The
+-- first is tried, and if the server won't take it, the second. Both name you,
+-- so a selected target is never the one unbound. Both keep the lockout of the
+-- instance you are standing in.
+-------------------------------------------------------------------------------
+
+local UNBIND_WAIT = 3
+
+function PBC:ResetLockouts()
+    local me = UnitName("player")
+    if not me then
+        return
+    end
+    local gmCommand = ".instance unbind all " .. me
+    local finished = false
+
+    local function refused(msg)
+        local lower = string.lower(msg)
+        return string.find(lower, "no such command", 1, true) ~= nil
+            or string.find(lower, "incorrect syntax", 1, true) ~= nil
+    end
+
+    local systemFilter, whisperFilter
+    local function stopWatching()
+        ChatFrame_RemoveMessageEventFilter("CHAT_MSG_SYSTEM", systemFilter)
+        ChatFrame_RemoveMessageEventFilter("CHAT_MSG_WHISPER", whisperFilter)
+        ChatFrame_RemoveMessageEventFilter("CHAT_MSG_WHISPER_INFORM", whisperFilter)
+    end
+
+    local function fallBack()
+        if finished then
+            return
+        end
+        finished = true
+        if PBC.modules.levelsync then
+            PBC:Command(".levelsync unbindall " .. me)
+        else
+            PBC:Print("Reset raid lockouts: the server didn't allow it. It needs game master rights, or mod-levelsync with LevelSync.AllowRaidUnbind = 1.")
+        end
+    end
+
+    systemFilter = function(self, event, msg)
+        if finished or type(msg) ~= "string" then
+            return false
+        end
+        if string.find(msg, "instances unbound:", 1, true) == 1 then
+            finished = true
+            return false
+        end
+        if refused(msg) then
+            PBC:After(0, fallBack)
+            return true
+        end
+        return false
+    end
+
+    -- A server that won't run the command for you hands it back as a whisper.
+    whisperFilter = function(self, event, msg)
+        if msg == gmCommand then
+            PBC:After(0, fallBack)
+            return true
+        end
+        return false
+    end
+
+    ChatFrame_AddMessageEventFilter("CHAT_MSG_SYSTEM", systemFilter)
+    ChatFrame_AddMessageEventFilter("CHAT_MSG_WHISPER", whisperFilter)
+    ChatFrame_AddMessageEventFilter("CHAT_MSG_WHISPER_INFORM", whisperFilter)
+    self:Command(gmCommand)
+
+    self:After(UNBIND_WAIT, function()
+        stopWatching()
+        fallBack()
+    end)
+end

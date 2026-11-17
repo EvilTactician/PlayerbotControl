@@ -131,42 +131,208 @@ function Options:Create()
         function(value) PBC.db.confirm = value end)
     confirm:SetPoint("TOPLEFT", skull, "BOTTOMLEFT", 0, -4)
 
-    -- Buttons ----------------------------------------------------------------
-
-    local buttonsHeading = addHeading(panel, "Buttons on the bar")
-    buttonsHeading:SetPoint("TOPLEFT", confirm, "BOTTOMLEFT", 0, -16)
-
-    -- One column per group.
-    local column = 0
-    for _, group in ipairs(PBC.groups) do
-        local groupLabel = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-        groupLabel:SetPoint("TOPLEFT", buttonsHeading, "BOTTOMLEFT", column * 150, -8)
-        groupLabel:SetText(group.name)
-
-        local previous = groupLabel
-        for _, action in ipairs(PBC.actions) do
-            if action.group == group.id then
-                local id = action.id
-                local check = addCheck(panel, action.name, nil,
-                    function() return not PBC.db.hidden[id] end,
-                    function(value) PBC.db.hidden[id] = (not value) or nil end)
-                check:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", 0, -4)
-                previous = check
-            end
-        end
-        column = column + 1
-    end
+    local more = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    more:SetPoint("TOPLEFT", confirm, "BOTTOMLEFT", 0, -16)
+    more:SetText("Switching buttons on and off, and your altbot names, are on the Buttons and Altbots pages under this one.")
 
     panel:SetScript("OnShow", function()
         Options:Refresh()
     end)
 
     InterfaceOptions_AddCategory(panel)
+
+    self:CreateButtonsPanel()
+    self:CreateAltbotsPanel()
+end
+
+-- A page listed under the main one in Interface > AddOns.
+local function subPanel(name, heading, intro)
+    local sub = CreateFrame("Frame", nil, UIParent)
+    sub.name = name
+    sub.parent = PBC.title
+    sub:Hide()
+
+    local title = sub:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
+    title:SetPoint("TOPLEFT", sub, "TOPLEFT", 16, -16)
+    title:SetText(heading)
+
+    local text = sub:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    text:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
+    text:SetPoint("RIGHT", sub, "RIGHT", -16, 0)
+    text:SetJustifyH("LEFT")
+    text:SetText(intro)
+    sub.intro = text
+
+    sub:SetScript("OnShow", function()
+        Options:Refresh()
+    end)
+    return sub
+end
+
+-------------------------------------------------------------------------------
+-- Buttons: switch each button on or off
+-------------------------------------------------------------------------------
+
+function Options:CreateButtonsPanel()
+    local sub = subPanel("Buttons", PBC.title .. ": Buttons",
+        "Untick a button to take it off the bar. A group with no buttons left disappears.")
+    self.buttonsPanel = sub
+
+    -- Three groups to a row. Each row starts below the longest group above.
+    local COLUMNS, WIDTH = 3, 190
+    local rowTop, rowColumn, rowOffset = sub.intro, 0, -16
+    local tallest, tallestColumn, tallestCount = nil, 0, -1
+    for index, group in ipairs(PBC.groups) do
+        local column = (index - 1) % COLUMNS
+        if column == 0 and index > 1 then
+            rowTop, rowColumn, rowOffset = tallest, tallestColumn, -16
+            tallest, tallestCount = nil, -1
+        end
+
+        local groupLabel = sub:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+        groupLabel:SetPoint("TOPLEFT", rowTop, "BOTTOMLEFT", (column - rowColumn) * WIDTH, rowOffset)
+        groupLabel:SetText(group.name)
+
+        local previous, count = groupLabel, 0
+        for _, action in ipairs(PBC.actions) do
+            if action.group == group.id then
+                local id = action.id
+                local check = addCheck(sub, action.name, nil,
+                    function() return not PBC.db.hidden[id] end,
+                    function(value) PBC.db.hidden[id] = (not value) or nil end)
+                check:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", 0, -4)
+                previous = check
+                count = count + 1
+            end
+        end
+
+        if count > tallestCount then
+            tallest, tallestColumn, tallestCount = previous, column, count
+        end
+    end
+
+    InterfaceOptions_AddCategory(sub)
+end
+
+-------------------------------------------------------------------------------
+-- Altbots: the two name lists
+-------------------------------------------------------------------------------
+
+-- Names typed one per line (commas and spaces work too), without repeats.
+local function parseNames(text)
+    local names, seen = {}, {}
+    for name in string.gmatch(text or "", "[^%s,;]+") do
+        local key = string.lower(name)
+        if not seen[key] then
+            seen[key] = true
+            names[#names + 1] = name
+        end
+    end
+    return names
+end
+
+local nameBoxes = {}
+
+local function addNameBox(parent, anchor, label, tip, listKey)
+    local heading = parent:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    heading:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -16)
+    heading:SetText(label)
+
+    local note = parent:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    note:SetPoint("TOPLEFT", heading, "BOTTOMLEFT", 0, -4)
+    note:SetPoint("RIGHT", parent, "RIGHT", -16, 0)
+    note:SetJustifyH("LEFT")
+    note:SetText(tip)
+
+    local box = CreateFrame("Frame", nil, parent)
+    box:SetPoint("TOPLEFT", note, "BOTTOMLEFT", 0, -6)
+    box:SetWidth(220)
+    box:SetHeight(130)
+    box:SetBackdrop({
+        bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+        tile = true, tileSize = 16, edgeSize = 16,
+        insets = { left = 4, right = 4, top = 4, bottom = 4 },
+    })
+    box:SetBackdropColor(0, 0, 0, 0.6)
+
+    local scrollName = newName("Scroll")
+    local scroll = CreateFrame("ScrollFrame", scrollName, box, "UIPanelScrollFrameTemplate")
+    scroll:SetPoint("TOPLEFT", box, "TOPLEFT", 8, -8)
+    scroll:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -28, 8)
+
+    local edit = CreateFrame("EditBox", nil, scroll)
+    edit:SetMultiLine(true)
+    edit:SetAutoFocus(false)
+    edit:SetFontObject(ChatFontNormal)
+    edit:SetWidth(180)
+    edit:SetHeight(110)
+    scroll:SetScrollChild(edit)
+
+    local function save()
+        PBC.chardb[listKey] = parseNames(edit:GetText())
+    end
+    edit:SetScript("OnEscapePressed", function(self)
+        self:ClearFocus()
+    end)
+    edit:SetScript("OnTextChanged", function(self)
+        if not self.filling then
+            save()
+        end
+        ScrollingEdit_OnTextChanged(self, scroll)
+    end)
+    edit:SetScript("OnCursorChanged", ScrollingEdit_OnCursorChanged)
+    edit:SetScript("OnUpdate", function(self, elapsed)
+        ScrollingEdit_OnUpdate(self, elapsed, scroll)
+    end)
+    -- Tidies the list (one name per line) once you click away.
+    edit:SetScript("OnEditFocusLost", function(self)
+        save()
+        Options:FillNames()
+    end)
+
+    -- Clicking anywhere in the box starts typing.
+    box:EnableMouse(true)
+    box:SetScript("OnMouseDown", function()
+        edit:SetFocus()
+    end)
+
+    nameBoxes[#nameBoxes + 1] = { edit = edit, key = listKey }
+    return box
+end
+
+function Options:CreateAltbotsPanel()
+    local sub = subPanel("Altbots", PBC.title .. ": Altbots",
+        "Altbots are your own characters played as bots. The server can't tell them apart from random bots, so list them here. One name per line. These lists belong to the character you're playing.")
+    self.altbotsPanel = sub
+
+    local altbots = addNameBox(sub, sub.intro, "Altbots",
+        "Park altbots and Logout altbots act on these names when they're in your group.",
+        "altbots")
+    addNameBox(sub, altbots, "Quick group",
+        "Quick group logs these in and invites them. Keep it to the few you group with most.",
+        "quickgroup")
+
+    InterfaceOptions_AddCategory(sub)
+end
+
+-- Writes the saved lists into the boxes, except one you're typing in.
+function Options:FillNames()
+    for _, entry in ipairs(nameBoxes) do
+        local edit = entry.edit
+        if not edit:HasFocus() then
+            edit.filling = true
+            edit:SetText(table.concat(PBC.chardb[entry.key] or {}, "\n"))
+            edit.filling = nil
+        end
+    end
 end
 
 function Options:Refresh()
-    local panel = self.panel
-    if not panel or not panel:IsShown() then
+    local shown = (self.panel and self.panel:IsShown())
+        or (self.buttonsPanel and self.buttonsPanel:IsShown())
+        or (self.altbotsPanel and self.altbotsPanel:IsShown())
+    if not shown then
         return
     end
     self.status:SetText(Bridge:StatusText())
@@ -175,6 +341,7 @@ function Options:Refresh()
     for _, check in ipairs(checks) do
         check.button:SetChecked(check.get() and true or false)
     end
+    self:FillNames()
 end
 
 function Options:Open()
