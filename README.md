@@ -1,7 +1,7 @@
-# Playerbot Control 0.2.0
+# Playerbot Control 0.2.1
 
 > [!WARNING]
-> **Early version (0.2.0).** Playerbot Control is in active development. This version has the bar, its
+> **Early version (0.2.1).** Playerbot Control is in active development. This version has the bar, its
 > options and the Movement, Combat, Group and Upkeep buttons. The Party buttons come in the next version
 > (see [Versions](#versions)).
 
@@ -9,7 +9,7 @@
 
 ![Interface Version](https://img.shields.io/badge/Interface-30300-blue)
 ![WoW Version](https://img.shields.io/badge/WoW-3.3.5a-orange)
-[![Version](https://img.shields.io/badge/Version-0.2.0-green)](https://github.com/EvilTactician/PlayerbotControl)
+[![Version](https://img.shields.io/badge/Version-0.2.1-green)](https://github.com/EvilTactician/PlayerbotControl)
 [![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
 
 **A World of Warcraft 3.3.5a addon with a small, clean control bar for your
@@ -67,7 +67,7 @@ Groups you leave open stay open. Anything that can't be undone asks first.
 
 | Button | What it does |
 | --- | --- |
-| **Drink** | Your bots sit down to eat and drink. |
+| **Drink** | Bots that are short of mana sit down to drink. Not while mounted or in combat. |
 | **Release** | Dead bots release their spirit to the nearest graveyard. |
 | **Revive** | Bots that released come back to life at the graveyard's spirit healer. |
 | **Roll** | Every bot in your group rolls 1-100. |
@@ -174,7 +174,7 @@ Server settings some buttons depend on, all in `playerbots.conf`:
 | Version | What's in it |
 | --- | --- |
 | 0.1.x | The bar, its options, the minimap button, and the Movement and Combat buttons. |
-| **0.2.0** (now) | Group (Drink, Release, Revive, Roll, Reset) and Upkeep (Maintenance, Autogear, Sell, Level sync, Raid tokens). |
+| **0.2.x** (now) | Group (Drink, Release, Revive, Roll, Reset) and Upkeep (Maintenance, Autogear, Sell, Level sync, Raid tokens). |
 | 0.3.0 | Party: your altbot lists, Quick group, Park altbots, Logout altbots, resetting dungeons and raid lockouts. |
 | 0.4.0 | Key bindings, unbound by default. |
 | **1.0.0** | Everything above, tested. |

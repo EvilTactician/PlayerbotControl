@@ -426,7 +426,10 @@ add({
 -------------------------------------------------------------------------------
 
 -- One order to every bot in the group, one answer back.
-local function groupOrder(id, name, sendOrder, after)
+--   after      runs when the order was taken
+--   declined   what to say when the bots were asked but none acted, for
+--              orders where that is a normal answer and not a fault
+local function groupOrder(id, name, sendOrder, after, declined)
     if PBC.busy[id] or not needGroup(name) then
         return
     end
@@ -436,7 +439,11 @@ local function groupOrder(id, name, sendOrder, after)
         if ok and after then
             after()
         end
-        report(name, ok, reason, matched, succeeded)
+        if declined and not ok and reason == "FAILED" and matched > 0 then
+            PBC:Print(name .. ": " .. declined)
+        else
+            report(name, ok, reason, matched, succeeded)
+        end
         PBC:Refresh()
     end)
 end
@@ -568,10 +575,12 @@ add({
         return ICONS .. "INV_Drink_07"
     end,
     Tooltip = function(tooltip)
-        tooltip:AddLine("Your bots sit down to eat and drink.", 1, 1, 1, true)
+        tooltip:AddLine("Bots that are short of mana sit down to drink.", 1, 1, 1, true)
+        tooltip:AddLine("Not while they are mounted or in combat.", 0.7, 0.7, 0.7, true)
     end,
     Click = function()
-        groupOrder("drink", "Drink", function(done) Bridge:GroupAction("DRINK", done) end)
+        groupOrder("drink", "Drink", function(done) Bridge:GroupAction("DRINK", done) end, nil,
+            "none of your bots needed a drink. They only drink when short of mana, and not while mounted or in combat.")
     end,
 })
 
@@ -729,8 +738,8 @@ add({
     end,
 })
 
--- "Nothing to sell" comes back as a plain failure; it isn't one.
-local NOTHING_TO_SELL = { FAILED = true }
+-- "Nothing to sell" comes back as a failure; it isn't one.
+local NOTHING_TO_SELL = { FAILED = true, ITEM_NOT_FOUND = true }
 
 local function sell(action, what)
     runBatch("sell", "Sell", 0.1, NOTHING_TO_SELL, nil,
