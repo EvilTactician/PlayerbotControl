@@ -28,13 +28,15 @@ local session = tostring(time())
 local lastHello = -1000
 local helloSeq = 0
 
--- Where the token and the three counts sit in each acknowledgement.
+-- Acknowledgements that carry "matched, succeeded, failed, reason": where
+-- the token and the first of the three counts sit.
 local ACKS = {
     FOLLOW_ORDER_ACK = { token = 1, counts = 2 },
     STAY_ORDER_ACK   = { token = 1, counts = 2 },
     ATTACK_ORDER_ACK = { token = 1, counts = 3 },
     FLEE_ORDER_ACK   = { token = 1, counts = 3 },
     GROUP_ACTION_ACK = { token = 1, counts = 3 },
+    BOT_RESET_ACK    = { token = 1, counts = 4 },
     STRATEGY_ACK     = { token = 3, counts = 5 },
 }
 
@@ -141,11 +143,25 @@ end
 -------------------------------------------------------------------------------
 -- Requests
 --
--- callback(ok, reason, matched, succeeded, failed)
+-- Group orders call back with (ok, reason, matched, succeeded, failed):
 --   ok       true when at least one bot took the order
 --   reason   the server's word for it: OK, PARTIAL, NO_GROUP, NO_BOTS, ...
 --            or ours: NO_BRIDGE, CONNECTING, TIMEOUT
+-- Orders for one bot call back with (ok, reason, number).
 -------------------------------------------------------------------------------
+
+-- Sends a request and keeps its callback until the answer or the timeout.
+local function request(token, payload, callback, timeout)
+    pending[token] = callback
+    send("RUN", payload)
+
+    PBC:After(timeout or ACK_TIMEOUT, function()
+        if pending[token] == callback then
+            pending[token] = nil
+            callback(false, "TIMEOUT", 0, 0, 0)
+        end
+    end)
+end
 
 local function run(build, callback)
     if Bridge.status ~= "ready" then
@@ -154,18 +170,8 @@ local function run(build, callback)
         callback(false, reason, 0, 0, 0)
         return
     end
-
     local token = nextToken()
-    pending[token] = callback
-    send("RUN", build(token))
-
-    PBC:After(ACK_TIMEOUT, function()
-        local waiting = pending[token]
-        if waiting then
-            pending[token] = nil
-            waiting(false, "TIMEOUT", 0, 0, 0)
-        end
-    end)
+    request(token, build(token), callback)
 end
 
 function Bridge:FollowOrder(callback)
@@ -190,6 +196,17 @@ function Bridge:GroupAction(action, callback)
     run(function(token) return "GROUP_ACTION~" .. token .. "~" .. action end, callback)
 end
 
+-- Every bot in the group rolls 1-100.
+function Bridge:GroupRoll(callback)
+    run(function(token) return "GROUP_ROLL~" .. token .. "~NORMAL" end, callback)
+end
+
+-- operation: "ACTIONS" (drop what they're doing) or "AI" (strategies back to
+-- their defaults)
+function Bridge:GroupReset(operation, callback)
+    run(function(token) return "BOT_RESET~" .. token .. "~GROUP~" .. operation .. "~" end, callback)
+end
+
 -- Changes strategies on the bots in your group.
 --   state:   "C" (combat) or "N" (non-combat)
 --   changes: such as "+passive" or "-passive"
@@ -197,18 +214,46 @@ function Bridge:GroupStrategy(state, changes, callback)
     run(function(token) return "STRATEGY~GROUP~~" .. token .. "~" .. state .. "~" .. changes end, callback)
 end
 
+-- One bot: repair, reagents, food and the rest of Playerbots' maintenance.
+function Bridge:Maintenance(bot, callback)
+    run(function(token) return "BOT_MAINTENANCE~" .. bot .. "~" .. token end, callback)
+end
+
+-- One bot sells to a vendor it is standing next to.
+--   action: "SELL_GREY" or "SELL_VENDOR". The number is how many it sold.
+function Bridge:Sell(bot, action, callback)
+    run(function(token) return "ITEM_ACTION~" .. bot .. "~" .. token .. "~" .. action .. "~0~0" end, callback)
+end
+
+-- One bot: new gear from the server's item pool, with the server's own
+-- limits. The server wants this in two steps, a plan and then the go-ahead.
+-- The number is how many slots changed.
+function Bridge:Autogear(bot, callback)
+    if self.status ~= "ready" then
+        run(nil, callback)
+        return
+    end
+    local token = nextToken()
+    request(token, "AUTOGEAR_PLAN~" .. token .. "~" .. bot .. "~DEFAULT~0~0", function(ok, reason)
+        if not ok then
+            callback(false, reason, 0)
+            return
+        end
+        request(token, "AUTOGEAR_APPLY~" .. token, callback, 10)
+    end)
+end
+
 -------------------------------------------------------------------------------
 -- Incoming
 -------------------------------------------------------------------------------
 
-local function finish(token, reason, matched, succeeded, failed)
-    local callback = pending[token]
+local function resolve(token, ...)
+    local callback = token and pending[token]
     if not callback then
         return -- not ours (MultiBot shares the prefix) or already timed out
     end
     pending[token] = nil
-    local ok = (reason == "OK") or (reason == "PARTIAL" and succeeded > 0)
-    callback(ok, reason, matched, succeeded, failed)
+    callback(...)
 end
 
 function Bridge:OnAddonMessage(prefix, message, channel, sender)
@@ -226,14 +271,31 @@ function Bridge:OnAddonMessage(prefix, message, channel, sender)
     local layout = ACKS[opcode]
     if layout then
         local fields = split(payload, "~")
-        local token = fields[layout.token]
-        if token and pending[token] then
-            finish(token,
-                decode(fields[layout.counts + 3] or "FAILED"),
-                tonumber(fields[layout.counts]) or 0,
-                tonumber(fields[layout.counts + 1]) or 0,
-                tonumber(fields[layout.counts + 2]) or 0)
-        end
+        local reason = decode(fields[layout.counts + 3] or "FAILED")
+        local succeeded = tonumber(fields[layout.counts + 1]) or 0
+        resolve(fields[layout.token],
+            (reason == "OK") or (reason == "PARTIAL" and succeeded > 0),
+            reason,
+            tonumber(fields[layout.counts]) or 0,
+            succeeded,
+            tonumber(fields[layout.counts + 2]) or 0)
+    elseif opcode == "GROUP_ROLL_ACK" then
+        -- token ~ status ~ mode ~ scope ~ matched ~ invoked ~ reason
+        local fields = split(payload, "~")
+        local matched, invoked = tonumber(fields[5]) or 0, tonumber(fields[6]) or 0
+        resolve(fields[1], fields[2] == "OK", decode(fields[7] or "FAILED"), matched, invoked, matched - invoked)
+    elseif opcode == "BOT_MAINTENANCE_ACK" then
+        -- token ~ bot ~ status ~ reason
+        local fields = split(payload, "~")
+        resolve(fields[1], fields[3] == "OK", decode(fields[4] or "FAILED"), 0)
+    elseif opcode == "INVENTORY_ITEM_ACTION" then
+        -- bot ~ token ~ action ~ item ~ status ~ reason ~ how many
+        local fields = split(payload, "~")
+        resolve(fields[2], fields[5] == "OK", decode(fields[6] or "FAILED"), tonumber(fields[7]) or 0)
+    elseif opcode == "AUTOGEAR_READY" or opcode == "AUTOGEAR_RESULT" then
+        -- token ~ status ~ reason ~ number ~ number
+        local fields = split(payload, "~")
+        resolve(fields[1], fields[2] == "OK", decode(fields[3] or "FAILED"), tonumber(fields[4]) or 0)
     elseif opcode == "ERR" then
         -- opcode ~ request type ~ token ~ reason
         local fields = split(payload, "~")
@@ -242,8 +304,8 @@ function Bridge:OnAddonMessage(prefix, message, channel, sender)
                 self.status = "incompatible"
                 PBC:Refresh()
             end
-        elseif fields[3] and pending[fields[3]] then
-            finish(fields[3], decode(fields[4] or "FAILED"), 0, 0, 0)
+        else
+            resolve(fields[3], false, decode(fields[4] or "FAILED"), 0, 0, 0)
         end
     elseif opcode == "HELLO_ACK" then
         local fields = split(payload, "~")

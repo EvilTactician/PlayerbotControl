@@ -6,6 +6,7 @@
 --   name      shown in the tooltip and the options
 --   caps      bridge capabilities it needs; nil when it needs none
 --   bridge    true when it can't work without mod-multibot-bridge
+--   module    optional server module it belongs to; hidden unless it answered
 --   Visual()  returns icon, r, g, b, corner text (colour and text may be nil)
 --   Tooltip(tooltip)  adds its lines under the name
 --   Click(mouseButton)
@@ -24,6 +25,8 @@ local MOON = 5
 PBC.groups = {
     { id = "movement", name = "Movement", icon = ICONS .. "Ability_Rogue_FleetFooted",   primary = "followstay" },
     { id = "combat",   name = "Combat",   icon = ICONS .. "Ability_Warrior_BattleShout", primary = "passive" },
+    { id = "group",    name = "Group",    icon = ICONS .. "INV_Misc_GroupLooking" },
+    { id = "upkeep",   name = "Upkeep",   icon = ICONS .. "Trade_BlackSmithing" },
 }
 
 PBC.actions = {}
@@ -415,5 +418,423 @@ add({
         if PBC.db.confirm then
             PBC:Print("CC: Moon marker set on " .. (UnitName("target") or "your target") .. ".")
         end
+    end,
+})
+
+-------------------------------------------------------------------------------
+-- Helpers for the Group and Upkeep buttons
+-------------------------------------------------------------------------------
+
+-- One order to every bot in the group, one answer back.
+--   after      runs when the order was taken
+--   declined   what to say when the bots were asked but none acted, for
+--              orders where that is a normal answer and not a fault
+local function groupOrder(id, name, sendOrder, after, declined)
+    if PBC.busy[id] or not needGroup(name) then
+        return
+    end
+    setBusy(id, true)
+    sendOrder(function(ok, reason, matched, succeeded)
+        PBC.busy[id] = nil
+        if ok and after then
+            after()
+        end
+        if declined and not ok and reason == "FAILED" and matched > 0 then
+            PBC:Print(name .. ": " .. declined)
+        else
+            report(name, ok, reason, matched, succeeded)
+        end
+        PBC:Refresh()
+    end)
+end
+
+-- Everyone else in your party or raid who is online. The bridge works out
+-- which of them are bots of yours and turns the rest down.
+local function otherMembers()
+    local names, me = {}, UnitName("player")
+    local function addUnit(unit)
+        local name = UnitName(unit)
+        if name and name ~= me and name ~= UNKNOWN and UnitIsConnected(unit) then
+            names[#names + 1] = name
+        end
+    end
+    if PBC:InRaid() then
+        for i = 1, GetNumRaidMembers() do
+            addUnit("raid" .. i)
+        end
+    else
+        for i = 1, GetNumPartyMembers() do
+            addUnit("party" .. i)
+        end
+    end
+    return names
+end
+
+local BOT_REASONS = {
+    VENDOR_NOT_FOUND = "not standing next to a vendor",
+    IN_COMBAT        = "in combat",
+    DEAD             = "dead",
+    LEVEL_TOO_LOW    = "below level 5",
+    ALT_BOT_REFUSED  = "the server has autogear switched off for altbots (AiPlayerbot.AutoGearCommandAltBots)",
+    COOLDOWN         = "autogeared a moment ago, try again shortly",
+    FORBIDDEN        = "not yours to command",
+    BOT_UNAVAILABLE  = "not available right now",
+    NOT_IN_WORLD     = "not available right now",
+    RATE_LIMIT       = "the server was busy, try again",
+    TIMEOUT          = "no answer from the server",
+    TARGET_CHANGED   = "changed while it was being prepared, try again",
+    PLAN_EXPIRED     = "changed while it was being prepared, try again",
+    PLAN_CHANGED     = "changed while it was being prepared, try again",
+    EXECUTION_FAILED = "the server couldn't finish it",
+}
+
+-- Works through the group one bot at a time and waits for each answer, with
+-- a pause in between where the server limits how fast it may be asked.
+--   each(bot, done)   sends the order; done(ok, reason, number)
+--   finish(result)    result.bots (succeeded), result.total (numbers summed),
+--                     result.quiet (turned down for a reason in `quiet`)
+--   reasons           wording for this job's own refusals
+local function runBatch(id, name, interval, quiet, reasons, each, finish)
+    local names = otherMembers()
+    local result = { bots = 0, total = 0, quiet = 0 }
+    local failed, failedOrder = {}, {}
+    local index = 0
+
+    local function step()
+        index = index + 1
+        local bot = names[index]
+        if not bot then
+            PBC.busy[id] = nil
+            for _, reason in ipairs(failedOrder) do
+                local why = (reasons and reasons[reason]) or BOT_REASONS[reason] or ("refused (" .. reason .. ")")
+                PBC:Print(name .. ": " .. table.concat(failed[reason], ", ") .. ": " .. why .. ".")
+            end
+            if result.bots == 0 and result.quiet == 0 and #failedOrder == 0 then
+                PBC:Print(name .. ": none of the others in your group are bots of yours.")
+            else
+                finish(result)
+            end
+            PBC:Refresh()
+            return
+        end
+
+        PBC.busy[id] = #names - index + 1
+        PBC:Refresh()
+
+        each(bot, function(ok, reason, number)
+            if ok then
+                result.bots = result.bots + 1
+                result.total = result.total + (number or 0)
+            elseif reason == "NO_BRIDGE" or reason == "CONNECTING" then
+                PBC.busy[id] = nil
+                report(name, false, reason)
+                PBC:Refresh()
+                return
+            elseif quiet and quiet[reason] then
+                result.quiet = result.quiet + 1
+            elseif reason ~= "NO_BOT" then
+                if not failed[reason] then
+                    failed[reason] = {}
+                    failedOrder[#failedOrder + 1] = reason
+                end
+                table.insert(failed[reason], bot)
+            end
+            if interval > 0 and names[index + 1] then
+                PBC:After(interval, step)
+            else
+                step()
+            end
+        end)
+    end
+
+    step()
+end
+
+local function batch(id, name, interval, quiet, reasons, each, finish)
+    if PBC.busy[id] or not needGroup(name) then
+        return
+    end
+    runBatch(id, name, interval, quiet, reasons, each, finish)
+end
+
+local function plural(count, word)
+    return count .. " " .. word .. (count == 1 and "" or "s")
+end
+
+-------------------------------------------------------------------------------
+-- Group
+-------------------------------------------------------------------------------
+
+add({
+    id = "drink",
+    group = "group",
+    name = "Drink",
+    caps = { "GROUP_ACTION_V1" },
+    bridge = true,
+    Visual = function()
+        return ICONS .. "INV_Drink_07"
+    end,
+    Tooltip = function(tooltip)
+        tooltip:AddLine("Bots that are short of mana sit down to drink.", 1, 1, 1, true)
+        tooltip:AddLine("Not while they are mounted or in combat.", 0.7, 0.7, 0.7, true)
+    end,
+    Click = function()
+        groupOrder("drink", "Drink", function(done) Bridge:GroupAction("DRINK", done) end, nil,
+            "none of your bots needed a drink. They only drink when short of mana, and not while mounted or in combat.")
+    end,
+})
+
+add({
+    id = "release",
+    group = "group",
+    name = "Release",
+    caps = { "GROUP_ACTION_V1" },
+    bridge = true,
+    Visual = function()
+        return ICONS .. "INV_Misc_Bone_HumanSkull_01"
+    end,
+    Tooltip = function(tooltip)
+        tooltip:AddLine("Dead bots release their spirit to the nearest graveyard.", 1, 1, 1, true)
+    end,
+    Click = function()
+        groupOrder("release", "Release", function(done) Bridge:GroupAction("RELEASE", done) end)
+    end,
+})
+
+add({
+    id = "revive",
+    group = "group",
+    name = "Revive",
+    caps = { "GROUP_ACTION_V1" },
+    bridge = true,
+    Visual = function()
+        return ICONS .. "Spell_Holy_Resurrection"
+    end,
+    Tooltip = function(tooltip)
+        tooltip:AddLine("Bots that released come back to life at the graveyard's spirit healer.", 1, 1, 1, true)
+    end,
+    Click = function()
+        groupOrder("revive", "Revive", function(done) Bridge:GroupAction("REVIVE", done) end)
+    end,
+})
+
+add({
+    id = "roll",
+    group = "group",
+    name = "Roll",
+    caps = { "GROUP_ROLL_V1" },
+    bridge = true,
+    Visual = function()
+        return ICONS .. "INV_Misc_Dice_02"
+    end,
+    Tooltip = function(tooltip)
+        tooltip:AddLine("Every bot in your group rolls 1-100.", 1, 1, 1, true)
+    end,
+    Click = function()
+        groupOrder("roll", "Roll", function(done) Bridge:GroupRoll(done) end)
+    end,
+})
+
+add({
+    id = "reset",
+    group = "group",
+    name = "Reset",
+    caps = { "BOT_RESET_V1" },
+    bridge = true,
+    Visual = function()
+        return ICONS .. "Spell_Holy_DispelMagic"
+    end,
+    Tooltip = function(tooltip)
+        tooltip:AddLine("For bots that are stuck.", 1, 1, 1, true)
+        tooltip:AddLine("Left-click: they drop what they're doing and start over", 1, 1, 1)
+        tooltip:AddLine("Shift-click: reset their AI to its default strategies (asks first)", 1, 1, 1)
+    end,
+    Click = function(mouseButton)
+        if mouseButton ~= "LeftButton" then
+            return
+        end
+        if not IsShiftKeyDown() then
+            groupOrder("reset", "Reset", function(done) Bridge:GroupReset("ACTIONS", done) end)
+            return
+        end
+        if PBC.busy.reset or not needGroup("Reset AI") then
+            return
+        end
+        PBC:Confirm("Reset your bots' AI?\n\nEvery bot in your group goes back to its default strategies. Anything changed on them since, such as Stay, Passive or strategies you set yourself, is lost.",
+            "Reset AI",
+            function()
+                groupOrder("reset", "Reset AI", function(done) Bridge:GroupReset("AI", done) end, function()
+                    -- Their follow and passive settings are gone with it.
+                    PBC.state.mode = nil
+                    PBC.state.passive = nil
+                end)
+            end)
+    end,
+})
+
+-------------------------------------------------------------------------------
+-- Upkeep
+-------------------------------------------------------------------------------
+
+add({
+    id = "maintenance",
+    group = "upkeep",
+    name = "Maintenance",
+    caps = { "BOT_MAINTENANCE_V1" },
+    bridge = true,
+    Visual = function()
+        return ICONS .. "Ability_Repair"
+    end,
+    Tooltip = function(tooltip)
+        tooltip:AddLine("Playerbots' maintenance for every bot in your group: repairs, reagents, food, ammo, spells and the like.", 1, 1, 1, true)
+        tooltip:AddLine("The server allows a few bots at a time, so a full group takes a little while. The number on the button counts down.", 0.7, 0.7, 0.7, true)
+    end,
+    Click = function()
+        -- The bridge takes four of these per ten seconds.
+        batch("maintenance", "Maintenance", 2.6, nil,
+            { DISABLED = "the server has the maintenance command switched off (AiPlayerbot.MaintenanceCommand)" },
+            function(bot, done)
+                Bridge:Maintenance(bot, done)
+            end,
+            function(result)
+                if PBC.db.confirm and result.bots > 0 then
+                    PBC:Print("Maintenance: done for " .. plural(result.bots, "bot") .. ".")
+                end
+            end)
+    end,
+})
+
+add({
+    id = "autogear",
+    group = "upkeep",
+    name = "Autogear",
+    caps = { "AUTOGEAR_OPTIONS_V1" },
+    bridge = true,
+    Visual = function()
+        return ICONS .. "INV_Chest_Chain"
+    end,
+    Tooltip = function(tooltip)
+        tooltip:AddLine("Gives every bot in your group new gear for its level from the server's item pool.", 1, 1, 1, true)
+        tooltip:AddLine("Replaces what they wear. Asks first.", 1, 0.6, 0, true)
+    end,
+    Click = function()
+        if PBC.busy.autogear or not needGroup("Autogear") then
+            return
+        end
+        PBC:Confirm("Autogear every bot in your group?\n\nEach bot gets new gear for its level from the server's item pool, within the server's quality and item level limits. It replaces what they are wearing and can't be undone.",
+            "Autogear",
+            function()
+                batch("autogear", "Autogear", 0.2, nil,
+                    { DISABLED = "the server has autogear switched off (AiPlayerbot.AutoGearCommand)" },
+                    function(bot, done)
+                        Bridge:Autogear(bot, done)
+                    end,
+                    function(result)
+                        if result.bots > 0 then
+                            PBC:Print("Autogear: " .. plural(result.bots, "bot") .. ", " .. plural(result.total, "slot") .. " changed.")
+                        end
+                    end)
+            end)
+    end,
+})
+
+-- "Nothing to sell" comes back as a failure; it isn't one.
+local NOTHING_TO_SELL = { FAILED = true, ITEM_NOT_FOUND = true }
+
+local function sell(action, what)
+    runBatch("sell", "Sell", 0.1, NOTHING_TO_SELL, nil,
+        function(bot, done)
+            Bridge:Sell(bot, action, done)
+        end,
+        function(result)
+            if result.bots > 0 then
+                PBC:Print("Sell: " .. plural(result.bots, "bot") .. " sold " .. plural(result.total, what) .. ".")
+            elseif result.quiet > 0 then
+                PBC:Print("Sell: nothing to sell.")
+            end
+        end)
+end
+
+add({
+    id = "sell",
+    group = "upkeep",
+    name = "Sell",
+    caps = { "INVENTORY_BULK_SELL_V1" },
+    bridge = true,
+    Visual = function()
+        return ICONS .. "INV_Misc_Coin_02"
+    end,
+    Tooltip = function(tooltip)
+        tooltip:AddLine("Each bot sells to a vendor it is standing next to.", 1, 1, 1, true)
+        tooltip:AddLine("Left-click: grey items only", 1, 1, 1)
+        tooltip:AddLine("Shift-click: everything they count as vendor trash, after equipping upgrades from their bags (asks first)", 1, 1, 1, true)
+    end,
+    Click = function(mouseButton)
+        if mouseButton ~= "LeftButton" or PBC.busy.sell or not needGroup("Sell") then
+            return
+        end
+        if not IsShiftKeyDown() then
+            sell("SELL_GREY", "grey item")
+            return
+        end
+        PBC:Confirm("Sell everything your bots count as vendor trash?\n\nThey first equip any upgrades from their bags. Then each bot next to a vendor sells what Playerbots sees no use for. That includes soulbound gear a bot can't wear yet because its level is too low, even if it would be an upgrade later.",
+            "Sell",
+            function()
+                if PBC.busy.sell or not needGroup("Sell") then
+                    return
+                end
+                -- The one order that has to go through chat: the bridge has
+                -- no way to ask for it.
+                SendChatMessage("equip upgrade", PBC:InRaid() and "RAID" or "PARTY")
+                setBusy("sell", true)
+                PBC:After(3, function()
+                    sell("SELL_VENDOR", "item")
+                end)
+            end)
+    end,
+})
+
+add({
+    id = "levelsync",
+    group = "upkeep",
+    name = "Level sync",
+    module = "levelsync",
+    Visual = function()
+        return ICONS .. "Achievement_Level_80"
+    end,
+    Tooltip = function(tooltip)
+        tooltip:AddLine("Runs mod-levelsync's level sync for your sync group (.levelsync level on).", 1, 1, 1, true)
+    end,
+    Click = function()
+        PBC:Command(".levelsync level on")
+    end,
+})
+
+add({
+    id = "tokens",
+    group = "upkeep",
+    name = "Raid tokens",
+    module = "tokenturnin",
+    Visual = function()
+        return ICONS .. "INV_Jewelry_Talisman_07"
+    end,
+    Tooltip = function(tooltip)
+        tooltip:AddLine("mod-token-turnin: turns raid tokens into the matching item for each character.", 1, 1, 1, true)
+        tooltip:AddLine("Left-click: check what would be redeemed, changing nothing", 1, 1, 1, true)
+        tooltip:AddLine("Shift-click: redeem (asks first)", 1, 1, 1)
+    end,
+    Click = function(mouseButton)
+        if mouseButton ~= "LeftButton" then
+            return
+        end
+        if not IsShiftKeyDown() then
+            PBC:Command(".tokenturnin check")
+            return
+        end
+        PBC:Confirm("Redeem raid tokens?\n\nEvery token the check lists is turned into its item for that character. This can't be undone. Left-click the button first to see what would happen.",
+            "Redeem",
+            function()
+                PBC:Command(".tokenturnin redeem")
+            end)
     end,
 })

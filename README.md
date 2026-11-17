@@ -1,15 +1,15 @@
-# Playerbot Control 0.1.1
+# Playerbot Control 0.2.1
 
 > [!WARNING]
-> **Early version (0.1.1).** Playerbot Control is in active development. This version has the bar, its
-> options and the Movement and Combat buttons. The Group, Upkeep and Party buttons come in the next
-> versions (see [Versions](#versions)).
+> **Early version (0.2.1).** Playerbot Control is in active development. This version has the bar, its
+> options and the Movement, Combat, Group and Upkeep buttons. The Party buttons come in the next version
+> (see [Versions](#versions)).
 
 <div align="center">
 
 ![Interface Version](https://img.shields.io/badge/Interface-30300-blue)
 ![WoW Version](https://img.shields.io/badge/WoW-3.3.5a-orange)
-[![Version](https://img.shields.io/badge/Version-0.1.1-green)](https://github.com/EvilTactician/PlayerbotControl)
+[![Version](https://img.shields.io/badge/Version-0.2.1-green)](https://github.com/EvilTactician/PlayerbotControl)
 [![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
 
 **A World of Warcraft 3.3.5a addon with a small, clean control bar for your
@@ -25,6 +25,8 @@ is whispered.
 - **Follow or Stay** and **Passive or Active** are single buttons that show the current mode, with a
   coloured glow so you can tell at a glance.
 - **Attack** and **CC** work on whatever you have targeted, in a party or a raid.
+- **Group** and **Upkeep** hold the less frequent orders: drink, release, revive, roll, reset, maintenance,
+  autogear, sell, level sync and raid tokens.
 - The bar can be moved anywhere, resized, hidden from a minimap button, and every button can be switched
   off.
 
@@ -36,9 +38,14 @@ Screenshots are coming soon.
 
 ## What's on the bar
 
-The bar has one button per group, and that button is the group's toggle. **Left-click** uses it,
-**Shift-click** repeats its current order for bots that just joined, and **right-click** shows or hides
-the group's other buttons above it. Groups you leave open stay open.
+The bar has one button per group.
+
+- **Movement** and **Combat** show their toggle on the bar. **Left-click** uses it, **Shift-click** repeats
+  its current order for bots that just joined, and **right-click** shows or hides the group's other
+  buttons above it.
+- **Group** and **Upkeep** have a plain group button. Click it to show or hide the group's buttons.
+
+Groups you leave open stay open. Anything that can't be undone asks first.
 
 ### Movement
 
@@ -55,6 +62,26 @@ the group's other buttons above it. Groups you leave open stay open.
 | **Passive / Active** (on the bar) | Passive bots don't fight. Blue glow: passive. Red: active. |
 | **Attack my target** | Your bots attack what you have targeted. It also puts the Skull marker on it, which you can switch off in the options. |
 | **CC my target** | Puts the Moon marker on your target; bots that can crowd control keep it controlled. Right-click takes the marker off. |
+
+### Group
+
+| Button | What it does |
+| --- | --- |
+| **Drink** | Bots that are short of mana sit down to drink. Not while mounted or in combat. |
+| **Release** | Dead bots release their spirit to the nearest graveyard. |
+| **Revive** | Bots that released come back to life at the graveyard's spirit healer. |
+| **Roll** | Every bot in your group rolls 1-100. |
+| **Reset** | For bots that are stuck. Left-click: they drop what they're doing and start over. Shift-click: resets their AI to its default strategies, after asking. |
+
+### Upkeep
+
+| Button | What it does |
+| --- | --- |
+| **Maintenance** | Playerbots' maintenance for every bot in your group: repairs, reagents, food, ammo, spells and the like. The server allows four bots per ten seconds, so the number on the button counts down. |
+| **Autogear** | Gives every bot in your group new gear for its level from the server's item pool, within the server's limits. Replaces what they wear, so it asks first. |
+| **Sell** | Each bot sells to a vendor it is standing next to. Left-click: grey items only. Shift-click: everything the bots count as vendor trash, after they equip upgrades from their bags; asks first. |
+| **Level sync** | Runs mod-levelsync's level sync (`.levelsync level on`). Only shown when the server has the module. |
+| **Raid tokens** | mod-token-turnin. Left-click: check what would be redeemed, changing nothing. Shift-click: redeem, after asking. Only shown when the server has the module. |
 
 A **?** on Follow / Stay or Passive / Active means no order has been given yet this session, so the addon
 doesn't know the mode. Leaving your group clears both.
@@ -100,13 +127,19 @@ On your client:
 - Nothing else. [MultiBot-Chatless](https://github.com/Wishmaster117/MultiBot-Chatless) isn't needed, but
   the two can run side by side: they share the bridge and ignore each other's messages.
 
-The buttons planned for later versions will also use these when they're on the realm; without them, their
-buttons stay hidden:
+Optional, on the realm. Without them their buttons stay hidden:
 
-- **[mod-levelsync](https://github.com/Lichborne-AC/mod-levelsync)**: Level sync, and resetting raid
-  lockouts without game master rights (needs `LevelSync.AllowRaidUnbind = 1`).
-- **[mod-token-turnin](https://github.com/Zerathane/mod-token-turnin)**: checking and redeeming raid
-  tokens.
+- **[mod-levelsync](https://github.com/Lichborne-AC/mod-levelsync)**: the Level sync button. A later
+  version will also use it to reset raid lockouts without game master rights (needs
+  `LevelSync.AllowRaidUnbind = 1`).
+- **[mod-token-turnin](https://github.com/Zerathane/mod-token-turnin)**: the Raid tokens button.
+
+Server settings some buttons depend on, all in `playerbots.conf`:
+
+- **Autogear:** `AiPlayerbot.AutoGearCommand = 1`, and `AiPlayerbot.AutoGearCommandAltBots = 1` for it to
+  work on altbots. `AiPlayerbot.AutoGearQualityLimit` and `AiPlayerbot.AutoGearScoreLimit` set what the
+  bots can get.
+- **Maintenance:** `AiPlayerbot.MaintenanceCommand = 1`.
 
 ## Installation
 
@@ -123,20 +156,25 @@ buttons stay hidden:
 
 ## Performance
 
-- The addon sends a message only when you click a button, plus one hello after you log in. It never polls
-  the server.
+- The addon sends a message only when you click a button. After you log in it sends one hello to the
+  bridge and one check each for mod-levelsync and mod-token-turnin, and hides what the server says back.
+  It never polls the server.
 - Nothing runs every frame. A timer runs for a few seconds after a click, to notice an order the server
   didn't answer.
 - Orders are addon messages that the bridge takes before anyone could see them. Bots aren't whispered and
   don't answer in chat, so chat modules such as mod-llm-chatter have nothing to react to.
+- The one exception is Shift-click Sell: the bridge has no order for "equip your upgrades", so the addon
+  says `equip upgrade` once in party or raid chat before selling.
+- Level sync and Raid tokens are the modules' own chat commands. The server takes a command before anyone
+  sees it; what the module prints in reply is its own output.
 - CC is a raid marker and sends no order at all.
 
 ## Versions
 
 | Version | What's in it |
 | --- | --- |
-| **0.1.x** (now) | The bar, its options, the minimap button, and the Movement and Combat buttons. |
-| 0.2.0 | Group (Drink, Release, Revive, Roll, Reset AI) and Upkeep (Maintenance, Autogear, Sell, Level sync, raid token check and redeem). |
+| 0.1.x | The bar, its options, the minimap button, and the Movement and Combat buttons. |
+| **0.2.x** (now) | Group (Drink, Release, Revive, Roll, Reset) and Upkeep (Maintenance, Autogear, Sell, Level sync, Raid tokens). |
 | 0.3.0 | Party: your altbot lists, Quick group, Park altbots, Logout altbots, resetting dungeons and raid lockouts. |
 | 0.4.0 | Key bindings, unbound by default. |
 | **1.0.0** | Everything above, tested. |
@@ -151,6 +189,11 @@ buttons stay hidden:
 - **Attack mid-fight:** bots already attacking your target don't need the order, so nothing is printed
   when they turn it down.
 - **After logging in** the mode isn't known until you give an order. A `/reload` keeps it.
+- **Sell and gear a bot can't wear yet:** Shift-click Sell sells what Playerbots sees no use for. That
+  includes soulbound gear a bot is still too low level to wear, even if it would be an upgrade later.
+  Left-click only sells grey items and can't touch such gear.
+- **Sell needs a vendor in reach:** each bot must be within talking distance of a vendor. Bots too far
+  away are named in chat.
 - **CC** relies on Playerbots' default crowd control marker (Moon). If you changed a bot's `rti cc`, mark
   with that one instead.
 - **Raid markers** need leader or assistant in a raid; in a party anyone can set them.
