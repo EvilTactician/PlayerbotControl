@@ -1014,6 +1014,9 @@ add({
     end,
 })
 
+-- Seconds after removing parked altbots before their Stay is put back on.
+local PARK_RECHECK = 2.5
+
 add({
     id = "park",
     group = "party",
@@ -1098,6 +1101,28 @@ add({
         end)
         for _, name in ipairs(names) do
             UninviteUnit(name)
+        end
+
+        -- A bot that finds itself alone after leaving can reset its AI to the
+        -- defaults, Follow included. Once that has had time to happen, Stay
+        -- goes back on each parked altbot by name.
+        local function stayOn(name, state, done)
+            Bridge:BotStrategy(name, state, "+stay,-follow", done)
+        end
+        local failed = {}
+        for index, name in ipairs(names) do
+            PBC:After(PARK_RECHECK + (index - 1) * 0.3, function()
+                stayOn(name, "N", function(ok, reason)
+                    if not ok then
+                        failed[#failed + 1] = name .. " (" .. tostring(reason) .. ")"
+                    else
+                        stayOn(name, "C", function() end)
+                    end
+                    if index == #names and #failed > 0 then
+                        PBC:Print("Park altbots: couldn't make sure these stay put: " .. table.concat(failed, ", ") .. ".")
+                    end
+                end)
+            end)
         end
     end,
 })

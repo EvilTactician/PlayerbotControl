@@ -1,14 +1,14 @@
-# Playerbot Control 0.3.2
+# Playerbot Control 0.3.3
 
 > [!WARNING]
-> **Early version (0.3.2).** Playerbot Control is in active development. This version has every group on
+> **Early version (0.3.3).** Playerbot Control is in active development. This version has every group on
 > the bar: Movement, Combat, Group, Upkeep and Party. Key bindings come next (see [Versions](#versions)).
 
 <div align="center">
 
 ![Interface Version](https://img.shields.io/badge/Interface-30300-blue)
 ![WoW Version](https://img.shields.io/badge/WoW-3.3.5a-orange)
-[![Version](https://img.shields.io/badge/Version-0.3.2-green)](https://github.com/EvilTactician/PlayerbotControl)
+[![Version](https://img.shields.io/badge/Version-0.3.3-green)](https://github.com/EvilTactician/PlayerbotControl)
 [![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
 
 **A World of Warcraft 3.3.5a addon with a small, clean control bar for your

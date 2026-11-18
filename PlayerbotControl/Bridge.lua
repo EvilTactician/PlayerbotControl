@@ -250,6 +250,11 @@ function Bridge:Autogear(bot, callback)
     end)
 end
 
+-- Changes strategies on one bot by name, in or out of your group.
+function Bridge:BotStrategy(bot, state, changes, callback)
+    run(function(token) return "STRATEGY~BOT~" .. encode(bot) .. "~" .. token .. "~" .. state .. "~" .. changes end, callback)
+end
+
 -- Looks a character up by name. Only characters you may control as bots
 -- are found. The callback gets (ok, reason, guid, state, name), where state
 -- is ONLINE, OFFLINE or CONNECTING and name is spelt as the server has it.
