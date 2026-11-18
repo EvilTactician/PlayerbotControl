@@ -220,6 +220,34 @@ events:SetScript("OnEvent", function(self, event, ...)
 end)
 
 -------------------------------------------------------------------------------
+-- Key bindings (Bindings.xml). Only Movement and Combat have them; the other
+-- groups are better used with care. All are unbound until you set a key.
+-------------------------------------------------------------------------------
+
+BINDING_HEADER_PLAYERBOTCONTROL = "Playerbot Control"
+BINDING_NAME_PLAYERBOTCONTROL_FOLLOWSTAY = "Follow / Stay"
+BINDING_NAME_PLAYERBOTCONTROL_FLEE = "Flee"
+BINDING_NAME_PLAYERBOTCONTROL_SUMMON = "Summon"
+BINDING_NAME_PLAYERBOTCONTROL_PASSIVE = "Passive / Active"
+BINDING_NAME_PLAYERBOTCONTROL_ATTACK = "Attack my target"
+BINDING_NAME_PLAYERBOTCONTROL_CC = "CC my target"
+
+-- A key does what a left-click on the button does, even while the bar or the
+-- button is hidden.
+function PBC:RunBinding(id)
+    local action = self.actionById and self.actionById[id]
+    if not action or not self.db then
+        return
+    end
+    if action.bridge and not self.Bridge:IsReady() then
+        self.Bridge:Hello()
+        self:Print(action.name .. ": " .. self.Bridge:StatusText())
+        return
+    end
+    action.Click("LeftButton")
+end
+
+-------------------------------------------------------------------------------
 -- Slash commands
 -------------------------------------------------------------------------------
 

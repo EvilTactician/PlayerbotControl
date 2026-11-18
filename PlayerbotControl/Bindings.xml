@@ -1,0 +1,20 @@
+<Bindings>
+	<Binding name="PLAYERBOTCONTROL_FOLLOWSTAY" header="PLAYERBOTCONTROL">
+		PlayerbotControl:RunBinding("followstay")
+	</Binding>
+	<Binding name="PLAYERBOTCONTROL_FLEE">
+		PlayerbotControl:RunBinding("flee")
+	</Binding>
+	<Binding name="PLAYERBOTCONTROL_SUMMON">
+		PlayerbotControl:RunBinding("summon")
+	</Binding>
+	<Binding name="PLAYERBOTCONTROL_PASSIVE">
+		PlayerbotControl:RunBinding("passive")
+	</Binding>
+	<Binding name="PLAYERBOTCONTROL_ATTACK">
+		PlayerbotControl:RunBinding("attack")
+	</Binding>
+	<Binding name="PLAYERBOTCONTROL_CC">
+		PlayerbotControl:RunBinding("cc")
+	</Binding>
+</Bindings>
