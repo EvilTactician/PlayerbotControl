@@ -10,7 +10,11 @@ local PBC = PlayerbotControl
 -- [module] = true (answered), false (didn't), nil (not checked yet)
 PBC.modules = {}
 
-local PROBE_WINDOW = 4
+-- The check ends once every module has answered and a moment has passed, or
+-- after PROBE_MAX seconds. Measured on the clock, not in frames: right after a
+-- loading screen one frame can take seconds.
+local PROBE_SETTLE = 1.5
+local PROBE_MAX = 15
 
 function PBC:Command(text)
     local me = UnitName("player")
@@ -45,6 +49,13 @@ local probes = {
 }
 
 local probing = false
+local answered = {}
+local lastAnswer = 0
+
+local function heard(name)
+    answered[name] = true
+    lastAnswer = GetTime()
+end
 
 local function systemFilter(self, event, msg)
     if not probing or type(msg) ~= "string" then
@@ -56,6 +67,7 @@ local function systemFilter(self, event, msg)
             if probe.found(msg) then
                 PBC.modules[name] = true
             end
+            heard(name)
             return true
         end
     end
@@ -67,12 +79,22 @@ local function whisperFilter(self, event, msg)
     if not probing then
         return false
     end
-    for _, probe in pairs(probes) do
+    for name, probe in pairs(probes) do
         if msg == probe.command then
+            heard(name)
             return true
         end
     end
     return false
+end
+
+local function allAnswered()
+    for name in pairs(probes) do
+        if not answered[name] then
+            return false
+        end
+    end
+    return true
 end
 
 function PBC:ProbeModules()
@@ -88,7 +110,16 @@ function PBC:ProbeModules()
         self:Command(probe.command)
     end
 
-    self:After(PROBE_WINDOW, function()
+    local started = GetTime()
+    local function finished()
+        local now = GetTime()
+        return (allAnswered() and (now - lastAnswer) >= PROBE_SETTLE) or (now - started) >= PROBE_MAX
+    end
+    local function wait()
+        if not finished() then
+            PBC:After(0.5, wait)
+            return
+        end
         probing = false
         ChatFrame_RemoveMessageEventFilter("CHAT_MSG_SYSTEM", systemFilter)
         ChatFrame_RemoveMessageEventFilter("CHAT_MSG_WHISPER", whisperFilter)
@@ -99,7 +130,8 @@ function PBC:ProbeModules()
             end
         end
         PBC:Refresh()
-    end)
+    end
+    self:After(0.5, wait)
 end
 
 -------------------------------------------------------------------------------
