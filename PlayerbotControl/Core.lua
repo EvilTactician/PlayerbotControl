@@ -19,7 +19,7 @@ local defaults = {
     growDown = false,   -- groups open upwards unless this is set
     skull = true,       -- Attack also puts the Skull marker on the target
     confirm = false,    -- print a line in chat when an order succeeds
-    open = { movement = false, combat = false, group = false, upkeep = false },
+    open = { movement = false, combat = false, group = false, upkeep = false, party = false },
     hidden = {},        -- [action id] = true for buttons switched off
     minimap = { show = true, angle = 200 },
 }
@@ -141,6 +141,17 @@ local function loadSettings()
     applyDefaults(PlayerbotControlDB, defaults)
     PBC.db = PlayerbotControlDB
     PBC.chardb = PlayerbotControlCharDB
+
+    -- Altbot names belong to the character who plays with them.
+    if type(PBC.chardb.altbots) ~= "table" then
+        PBC.chardb.altbots = {}
+    end
+    if type(PBC.chardb.quickgroup) ~= "table" then
+        PBC.chardb.quickgroup = {}
+    end
+    if type(PBC.chardb.quickgroup2) ~= "table" then
+        PBC.chardb.quickgroup2 = {}
+    end
 
     local saved = PBC.chardb.state
     local logoutAt = PBC.chardb.logoutAt

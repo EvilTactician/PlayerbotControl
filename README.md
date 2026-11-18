@@ -1,15 +1,14 @@
-# Playerbot Control 0.2.1
+# Playerbot Control 0.3.3
 
 > [!WARNING]
-> **Early version (0.2.1).** Playerbot Control is in active development. This version has the bar, its
-> options and the Movement, Combat, Group and Upkeep buttons. The Party buttons come in the next version
-> (see [Versions](#versions)).
+> **Early version (0.3.3).** Playerbot Control is in active development. This version has every group on
+> the bar: Movement, Combat, Group, Upkeep and Party. Key bindings come next (see [Versions](#versions)).
 
 <div align="center">
 
 ![Interface Version](https://img.shields.io/badge/Interface-30300-blue)
 ![WoW Version](https://img.shields.io/badge/WoW-3.3.5a-orange)
-[![Version](https://img.shields.io/badge/Version-0.2.1-green)](https://github.com/EvilTactician/PlayerbotControl)
+[![Version](https://img.shields.io/badge/Version-0.3.3-green)](https://github.com/EvilTactician/PlayerbotControl)
 [![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
 
 **A World of Warcraft 3.3.5a addon with a small, clean control bar for your
@@ -27,6 +26,8 @@ is whispered.
 - **Attack** and **CC** work on whatever you have targeted, in a party or a raid.
 - **Group** and **Upkeep** hold the less frequent orders: drink, release, revive, roll, reset, maintenance,
   autogear, sell, level sync and raid tokens.
+- **Party** looks after your altbots: bring a few in with one click, park them at an inn, or log them out,
+  without touching random bots or other players.
 - The bar can be moved anywhere, resized, hidden from a minimap button, and every button can be switched
   off.
 
@@ -43,7 +44,8 @@ The bar has one button per group.
 - **Movement** and **Combat** show their toggle on the bar. **Left-click** uses it, **Shift-click** repeats
   its current order for bots that just joined, and **right-click** shows or hides the group's other
   buttons above it.
-- **Group** and **Upkeep** have a plain group button. Click it to show or hide the group's buttons.
+- **Group**, **Upkeep** and **Party** have a plain group button. Click it to show or hide the group's
+  buttons.
 
 Groups you leave open stay open. Anything that can't be undone asks first.
 
@@ -83,6 +85,22 @@ Groups you leave open stay open. Anything that can't be undone asks first.
 | **Level sync** | Runs mod-levelsync's level sync (`.levelsync level on`). Only shown when the server has the module. |
 | **Raid tokens** | mod-token-turnin. Left-click: check what would be redeemed, changing nothing. Shift-click: redeem, after asking. Only shown when the server has the module. |
 
+### Party
+
+Altbots are characters you have manually created, on your own account or another, linked account. The
+server can't tell them apart from random bots, so you list their names in the options (see
+[Altbots](#altbots)).
+
+| Button | What it does |
+| --- | --- |
+| **Quick group** | Left-click: Quick group 1. Right-click: Quick group 2. Brings in the bots on that list: logs in the ones that are offline (they join you by themselves) and invites the ones that are online, such as parked ones. Turns your party into a raid when a sixth member needs it. |
+| **Park altbots** | Your listed altbots in the group stay where they are and leave the group, but stay online, for example at an inn. Random bots and players carry on as before. |
+| **Logout altbots** | Your listed altbots in the group leave it and log out. Asks first. Parked altbots, random bots and players aren't affected. |
+| **Reset dungeons** | The game's own reset of your normal dungeons. You need to be the group leader. |
+| **Reset raid lockouts** | Removes raid and dungeon lockouts, except for the instance each character is in. Left-click: you and every bot in your group. Right-click: you and everyone in your group, players too. Uses `.instance unbind all` if you're a game master, otherwise `.levelsync unbindall`. Asks first, naming everyone it will reset, and prints one line with the total. |
+
+Park, Logout and inviting need you to be the group leader.
+
 A **?** on Follow / Stay or Passive / Active means no order has been given yet this session, so the addon
 doesn't know the mode. Leaving your group clears both.
 
@@ -102,7 +120,18 @@ Under **Interface > AddOns > Playerbot Control**, or `/pbc`:
 - **Reset position**: puts the bar back in the middle of the screen.
 - **Attack also marks the target with Skull**
 - **Confirm orders in chat**: off by default. Failures are always printed, with the reason.
-- **Buttons on the bar**: switch each button on or off. A group with no buttons left disappears.
+- **Buttons** page: switch each button on or off. A group with no buttons left disappears.
+- **Altbots** page: your name lists. They belong to the character you're playing.
+
+### Altbots
+
+- **Altbots:** every altbot you might group with. Park altbots and Logout altbots act on these names when
+  they're in your group.
+- **Quick group 1** and **Quick group 2:** two small sets you often group with. Left-click Quick group for
+  the first, right-click for the second.
+
+Type one name per line. Commas or spaces between names work too, capitals don't matter, and changes are
+saved as you type. A name can be on more than one list.
 
 | Command | What it does |
 | --- | --- |
@@ -129,9 +158,8 @@ On your client:
 
 Optional, on the realm. Without them their buttons stay hidden:
 
-- **[mod-levelsync](https://github.com/Lichborne-AC/mod-levelsync)**: the Level sync button. A later
-  version will also use it to reset raid lockouts without game master rights (needs
-  `LevelSync.AllowRaidUnbind = 1`).
+- **[mod-levelsync](https://github.com/Lichborne-AC/mod-levelsync)**: the Level sync button, and Reset
+  raid lockouts for players without game master rights (needs `LevelSync.AllowRaidUnbind = 1`).
 - **[mod-token-turnin](https://github.com/Zerathane/mod-token-turnin)**: the Raid tokens button.
 
 Server settings some buttons depend on, all in `playerbots.conf`:
@@ -140,6 +168,9 @@ Server settings some buttons depend on, all in `playerbots.conf`:
   work on altbots. `AiPlayerbot.AutoGearQualityLimit` and `AiPlayerbot.AutoGearScoreLimit` set what the
   bots can get.
 - **Maintenance:** `AiPlayerbot.MaintenanceCommand = 1`.
+- **Quick group:** your altbots must be ones Playerbots lets you control (`AiPlayerbot.AllowAccountBots`,
+  `AiPlayerbot.AllowGuildBots` or linked accounts), and `AiPlayerbot.MaxAddedBots` limits how many can be
+  online at once.
 
 ## Installation
 
@@ -165,7 +196,7 @@ Server settings some buttons depend on, all in `playerbots.conf`:
   don't answer in chat, so chat modules such as mod-llm-chatter have nothing to react to.
 - The one exception is Shift-click Sell: the bridge has no order for "equip your upgrades", so the addon
   says `equip upgrade` once in party or raid chat before selling.
-- Level sync and Raid tokens are the modules' own chat commands. The server takes a command before anyone
+- Level sync, Raid tokens and Reset raid lockouts are server chat commands. The server takes a command before anyone
   sees it; what the module prints in reply is its own output.
 - CC is a raid marker and sends no order at all.
 
@@ -174,8 +205,8 @@ Server settings some buttons depend on, all in `playerbots.conf`:
 | Version | What's in it |
 | --- | --- |
 | 0.1.x | The bar, its options, the minimap button, and the Movement and Combat buttons. |
-| **0.2.x** (now) | Group (Drink, Release, Revive, Roll, Reset) and Upkeep (Maintenance, Autogear, Sell, Level sync, Raid tokens). |
-| 0.3.0 | Party: your altbot lists, Quick group, Park altbots, Logout altbots, resetting dungeons and raid lockouts. |
+| 0.2.x | Group (Drink, Release, Revive, Roll, Reset) and Upkeep (Maintenance, Autogear, Sell, Level sync, Raid tokens). |
+| **0.3.x** (now) | Party: your altbot lists, Quick group, Park altbots, Logout altbots, resetting dungeons and raid lockouts. |
 | 0.4.0 | Key bindings, unbound by default. |
 | **1.0.0** | Everything above, tested. |
 
@@ -194,6 +225,9 @@ Server settings some buttons depend on, all in `playerbots.conf`:
   Left-click only sells grey items and can't touch such gear.
 - **Sell needs a vendor in reach:** each bot must be within talking distance of a vendor. Bots too far
   away are named in chat.
+- **Park and the rest of the group:** the bridge has no Stay for a single bot. So Park tells the whole
+  group to stay, removes the altbots, then gives everyone left the order they had before (Follow, unless
+  they were staying). Random bots briefly stop, then carry on.
 - **CC** relies on Playerbots' default crowd control marker (Moon). If you changed a bot's `rti cc`, mark
   with that one instead.
 - **Raid markers** need leader or assistant in a raid; in a party anyone can set them.

@@ -59,6 +59,13 @@ local function split(text, sep)
     return out
 end
 
+-- Percent-encodes everything but letters and digits, for names.
+local function encode(text)
+    return (string.gsub(text or "", "[^%w]", function(char)
+        return string.format("%%%02X", string.byte(char))
+    end))
+end
+
 local function decode(text)
     return (string.gsub(text or "", "%%(%x%x)", function(hex)
         return string.char(tonumber(hex, 16))
@@ -151,9 +158,9 @@ end
 -------------------------------------------------------------------------------
 
 -- Sends a request and keeps its callback until the answer or the timeout.
-local function request(token, payload, callback, timeout)
+local function request(token, payload, callback, timeout, opcode)
     pending[token] = callback
-    send("RUN", payload)
+    send(opcode or "RUN", payload)
 
     PBC:After(timeout or ACK_TIMEOUT, function()
         if pending[token] == callback then
@@ -163,7 +170,7 @@ local function request(token, payload, callback, timeout)
     end)
 end
 
-local function run(build, callback)
+local function run(build, callback, opcode)
     if Bridge.status ~= "ready" then
         local reason = (Bridge.status == "connecting") and "CONNECTING" or "NO_BRIDGE"
         Bridge:Hello()
@@ -171,7 +178,7 @@ local function run(build, callback)
         return
     end
     local token = nextToken()
-    request(token, build(token), callback)
+    request(token, build(token), callback, nil, opcode)
 end
 
 function Bridge:FollowOrder(callback)
@@ -243,6 +250,55 @@ function Bridge:Autogear(bot, callback)
     end)
 end
 
+-- Changes strategies on one bot by name, in or out of your group.
+function Bridge:BotStrategy(bot, state, changes, callback)
+    run(function(token) return "STRATEGY~BOT~" .. encode(bot) .. "~" .. token .. "~" .. state .. "~" .. changes end, callback)
+end
+
+-- Looks a character up by name. Only characters you may control as bots
+-- are found. The callback gets (ok, reason, guid, state, name), where state
+-- is ONLINE, OFFLINE or CONNECTING and name is spelt as the server has it.
+function Bridge:Resolve(name, callback)
+    run(function(token) return "BOT_TARGET_RESOLVE~" .. encode(name) .. "~" .. token end, callback, "GET")
+end
+
+-- Logs a bot in. It joins your group by itself once it is online.
+function Bridge:Login(guid, callback)
+    run(function(token) return "BOT_CONNECT~" .. guid .. "~" .. token end, callback)
+end
+
+-- Removes a bot from your group and logs it out.
+function Bridge:LogoutFromGroup(guid, callback)
+    run(function(token) return "BOT_DISCONNECT_GROUP~" .. guid .. "~" .. token end, callback)
+end
+
+-- Asks which bots the bridge can see: yours, and random bots in your group.
+-- The callback gets a table of [lower-case name] = true, or nil on failure.
+local rosterCallback
+function Bridge:Roster(callback)
+    if self.status ~= "ready" then
+        callback(nil)
+        return
+    end
+    if rosterCallback then
+        local previous = rosterCallback
+        rosterCallback = function(bots)
+            previous(bots)
+            callback(bots)
+        end
+        return
+    end
+    rosterCallback = callback
+    send("GET", "ROSTER")
+    PBC:After(ACK_TIMEOUT, function()
+        if rosterCallback then
+            local waiting = rosterCallback
+            rosterCallback = nil
+            waiting(nil)
+        end
+    end)
+end
+
 -------------------------------------------------------------------------------
 -- Incoming
 -------------------------------------------------------------------------------
@@ -296,6 +352,28 @@ function Bridge:OnAddonMessage(prefix, message, channel, sender)
         -- token ~ status ~ reason ~ number ~ number
         local fields = split(payload, "~")
         resolve(fields[1], fields[2] == "OK", decode(fields[3] or "FAILED"), tonumber(fields[4]) or 0)
+    elseif opcode == "ROSTER" then
+        -- name,class,level,... ; name,class,level,...
+        if rosterCallback then
+            local waiting, bots = rosterCallback, {}
+            rosterCallback = nil
+            for entry in string.gmatch(payload, "[^;]+") do
+                local name = string.match(entry, "^([^,]+)")
+                if name then
+                    bots[string.lower(name)] = true
+                end
+            end
+            waiting(bots)
+        end
+    elseif opcode == "BOT_TARGET_RESOLVE" then
+        -- token ~ status ~ reason ~ name ~ guid ~ state
+        local fields = split(payload, "~")
+        resolve(fields[1], fields[2] == "OK", decode(fields[3] or "FAILED"),
+            tonumber(fields[5]) or 0, fields[6] or "UNKNOWN", decode(fields[4] or ""))
+    elseif opcode == "BOT_LIFECYCLE" then
+        -- token ~ guid ~ name ~ action ~ status ~ reason
+        local fields = split(payload, "~")
+        resolve(fields[1], fields[5] == "OK" or fields[5] == "PENDING", decode(fields[6] or "FAILED"), 0)
     elseif opcode == "ERR" then
         -- opcode ~ request type ~ token ~ reason
         local fields = split(payload, "~")

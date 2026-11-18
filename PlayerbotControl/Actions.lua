@@ -27,6 +27,7 @@ PBC.groups = {
     { id = "combat",   name = "Combat",   icon = ICONS .. "Ability_Warrior_BattleShout", primary = "passive" },
     { id = "group",    name = "Group",    icon = ICONS .. "INV_Misc_GroupLooking" },
     { id = "upkeep",   name = "Upkeep",   icon = ICONS .. "Trade_BlackSmithing" },
+    { id = "party",    name = "Party",    icon = ICONS .. "Spell_Holy_PrayerofSpirit" },
 }
 
 PBC.actions = {}
@@ -494,8 +495,9 @@ local BOT_REASONS = {
 --   finish(result)    result.bots (succeeded), result.total (numbers summed),
 --                     result.quiet (turned down for a reason in `quiet`)
 --   reasons           wording for this job's own refusals
-local function runBatch(id, name, interval, quiet, reasons, each, finish)
-    local names = otherMembers()
+--   list              names to work through; the rest of your group when nil
+local function runBatch(id, name, interval, quiet, reasons, each, finish, list)
+    local names = list or otherMembers()
     local result = { bots = 0, total = 0, quiet = 0 }
     local failed, failedOrder = {}, {}
     local index = 0
@@ -509,7 +511,7 @@ local function runBatch(id, name, interval, quiet, reasons, each, finish)
                 local why = (reasons and reasons[reason]) or BOT_REASONS[reason] or ("refused (" .. reason .. ")")
                 PBC:Print(name .. ": " .. table.concat(failed[reason], ", ") .. ": " .. why .. ".")
             end
-            if result.bots == 0 and result.quiet == 0 and #failedOrder == 0 then
+            if not list and result.bots == 0 and result.quiet == 0 and #failedOrder == 0 then
                 PBC:Print(name .. ": none of the others in your group are bots of yours.")
             else
                 finish(result)
@@ -836,5 +838,427 @@ add({
             function()
                 PBC:Command(".tokenturnin redeem")
             end)
+    end,
+})
+
+-------------------------------------------------------------------------------
+-- Party
+--
+-- Altbots are your own characters played as bots. The bridge can't tell them
+-- from random bots, so the names come from two lists in the options:
+--   Altbots       Park and Logout act on these, when they are in your group
+--   Quick group   two short lists that Quick group logs in and invites
+-------------------------------------------------------------------------------
+
+local function isLeader()
+    if PBC:InRaid() then
+        return IsRaidLeader() and true or false
+    end
+    return (not PBC:InGroup()) or (IsPartyLeader() and true or false)
+end
+
+-- [lower-case name] = name as the game shows it, for everyone in your group.
+local function groupNames()
+    local names = {}
+    for _, name in ipairs(otherMembers()) do
+        names[string.lower(name)] = name
+    end
+    return names
+end
+
+-- The names from a list that are in your group right now.
+local function listedInGroup(list)
+    local inGroup, found = groupNames(), {}
+    for _, name in ipairs(list) do
+        local member = inGroup[string.lower(name)]
+        if member then
+            found[#found + 1] = member
+        end
+    end
+    return found
+end
+
+local function noNames(name, listName)
+    PBC:Print(name .. ": your " .. listName .. " list is empty. Add names under Interface > AddOns > Playerbot Control > Altbots.")
+end
+
+local LIFECYCLE_REASONS = {
+    NOT_ALLOWED      = "not one of your characters, or the name is misspelt",
+    IN_USE           = "being played by someone",
+    MAX_BOTS         = "you're at the server's bot limit (AiPlayerbot.MaxAddedBots)",
+    TOO_MANY_PENDING = "too many logging in at once, try again",
+    NOT_LEADER       = "only the group leader can invite",
+    INVITE_FAILED    = "couldn't be invited",
+}
+
+-- Logs in and invites the bots on one of the Quick group lists.
+local function quickGroup(listKey, label)
+    if PBC.busy.quickgroup then
+        return
+    end
+    local list = PBC.chardb[listKey]
+    if #list == 0 then
+        noNames(label, label)
+        return
+    end
+
+    local inGroup = groupNames()
+    local wanted = {}
+    for _, name in ipairs(list) do
+        if not inGroup[string.lower(name)] then
+            wanted[#wanted + 1] = name
+        end
+    end
+    if #wanted == 0 then
+        PBC:Print(label .. ": everyone on the list is already in your group.")
+        return
+    end
+
+    local invited, loggingIn = {}, {}
+
+    -- Bots asked to join that haven't arrived yet.
+    local function onTheirWay()
+        local members, count = groupNames(), 0
+        for _, names in ipairs({ invited, loggingIn }) do
+            for _, name in ipairs(names) do
+                if not members[string.lower(name)] then
+                    count = count + 1
+                end
+            end
+        end
+        return count
+    end
+
+    runBatch("quickgroup", label, 0.1, nil, LIFECYCLE_REASONS,
+        function(bot, done)
+            Bridge:Resolve(bot, function(ok, reason, guid, state, name)
+                if not ok then
+                    done(false, reason)
+                    return
+                end
+                name = (name ~= "" and name) or bot
+                if state == "ONLINE" then
+                    -- Online but not with you, such as a parked bot.
+                    if not isLeader() then
+                        done(false, "NOT_LEADER")
+                        return
+                    end
+                    -- A party holds five; a sixth needs a raid.
+                    if PBC:InGroup() and not PBC:InRaid()
+                        and (GetNumPartyMembers() + onTheirWay()) >= 4 then
+                        ConvertToRaid()
+                    end
+                    InviteUnit(name)
+                    invited[#invited + 1] = name
+                    done(true, "OK", 0)
+                elseif state == "CONNECTING" then
+                    loggingIn[#loggingIn + 1] = name
+                    done(true, "OK", 0)
+                elseif reason == "IN_USE" then
+                    done(false, "IN_USE")
+                else
+                    Bridge:Login(guid, function(ok2, reason2)
+                        if ok2 then
+                            loggingIn[#loggingIn + 1] = name
+                        end
+                        done(ok2, reason2, 0)
+                    end)
+                end
+            end)
+        end,
+        function()
+            local parts = {}
+            if #loggingIn > 0 then
+                parts[#parts + 1] = "logging in " .. table.concat(loggingIn, ", ")
+            end
+            if #invited > 0 then
+                parts[#parts + 1] = "inviting " .. table.concat(invited, ", ")
+            end
+            if #parts > 0 then
+                PBC:Print(label .. ": " .. table.concat(parts, "; ") .. ".")
+            end
+        end,
+        wanted)
+end
+
+local function listLine(tooltip, label, list)
+    if #list > 0 then
+        tooltip:AddLine(label .. ": " .. table.concat(list, ", "), 0.7, 0.7, 0.7, true)
+    else
+        tooltip:AddLine(label .. ": empty. Add names in the options under Altbots.", 1, 0.6, 0, true)
+    end
+end
+
+add({
+    id = "quickgroup",
+    group = "party",
+    name = "Quick group",
+    caps = { "BOT_TARGET_RESOLVE_V1", "BOT_LIFECYCLE_V1" },
+    bridge = true,
+    Visual = function()
+        return ICONS .. "INV_Misc_GroupNeedMore"
+    end,
+    Tooltip = function(tooltip)
+        tooltip:AddLine("Logs in the bots on a Quick group list and invites the ones already online.", 1, 1, 1, true)
+        tooltip:AddLine("Left-click: Quick group 1", 1, 1, 1)
+        tooltip:AddLine("Right-click: Quick group 2", 1, 1, 1)
+        listLine(tooltip, "Quick group 1", PBC.chardb.quickgroup)
+        listLine(tooltip, "Quick group 2", PBC.chardb.quickgroup2)
+    end,
+    Click = function(mouseButton)
+        if mouseButton == "RightButton" then
+            quickGroup("quickgroup2", "Quick group 2")
+        else
+            quickGroup("quickgroup", "Quick group 1")
+        end
+    end,
+})
+
+-- Seconds after removing parked altbots before their Stay is put back on.
+local PARK_RECHECK = 2.5
+
+add({
+    id = "park",
+    group = "party",
+    name = "Park altbots",
+    caps = { "STAY_ORDER_V1", "FOLLOW_ORDER_V1" },
+    bridge = true,
+    Visual = function()
+        return ICONS .. "INV_Misc_Rune_01"
+    end,
+    Tooltip = function(tooltip)
+        tooltip:AddLine("Your altbots in this group stay where they are now and leave the group. They stay online.", 1, 1, 1, true)
+        tooltip:AddLine("Random bots and players aren't affected: they keep following, or staying, as before.", 0.7, 0.7, 0.7, true)
+        tooltip:AddLine("Invite them, or use Quick group, to have them join you again.", 0.7, 0.7, 0.7, true)
+    end,
+    Click = function()
+        if PBC.busy.park then
+            return
+        end
+        if #PBC.chardb.altbots == 0 then
+            noNames("Park altbots", "Altbots")
+            return
+        end
+        if not needGroup("Park altbots") then
+            return
+        end
+        local names = listedInGroup(PBC.chardb.altbots)
+        if #names == 0 then
+            PBC:Print("Park altbots: none of your altbots are in your group.")
+            return
+        end
+        if not isLeader() then
+            PBC:Print("Park altbots: only the group leader can remove them from the group.")
+            return
+        end
+
+        if not Bridge:IsReady() then
+            report("Park altbots", false, Bridge.status == "connecting" and "CONNECTING" or "NO_BRIDGE")
+            Bridge:Hello()
+            return
+        end
+
+        -- There is no Stay for a single bot, so everyone is told to stay, the
+        -- altbots leave, and the rest are given back what they were doing.
+        -- The game only lets an addon remove group members straight from a
+        -- click, so they're removed now, right behind the Stay order. The
+        -- server handles the two in the order they were sent.
+        local previous = PBC.state.mode
+        setBusy("park", true)
+        Bridge:StayOrder(function(ok, reason, matched, succeeded)
+            if not ok then
+                PBC.busy.park = nil
+                report("Park altbots", ok, reason, matched, succeeded)
+                PBC:Refresh()
+                return
+            end
+            if reason == "PARTIAL" then
+                PBC:Print("Park altbots: only " .. succeeded .. " of " .. matched .. " bots took the Stay order, so a parked altbot may keep following you.")
+            end
+            PBC:After(1.5, function()
+                PBC.busy.park = nil
+                PBC:Print("Park altbots: " .. table.concat(names, ", ") .. " parked.")
+                if not PBC:InGroup() then
+                    PBC:Refresh()
+                    return
+                end
+                if previous == "stay" then
+                    PBC.state.mode = "stay"
+                    restorePassive()
+                    PBC:Refresh()
+                    return
+                end
+                Bridge:FollowOrder(function(ok2, reason2, matched2, succeeded2)
+                    if ok2 then
+                        PBC.state.mode = "follow"
+                    elseif reason2 ~= "NO_BOTS" and reason2 ~= "NO_MATCH" and reason2 ~= "NO_GROUP" then
+                        report("Follow", ok2, reason2, matched2, succeeded2)
+                    end
+                    PBC:Refresh()
+                end)
+                restorePassive()
+            end)
+        end)
+        for _, name in ipairs(names) do
+            UninviteUnit(name)
+        end
+
+        -- A bot that finds itself alone after leaving can reset its AI to the
+        -- defaults, Follow included. Once that has had time to happen, Stay
+        -- goes back on each parked altbot by name.
+        local function stayOn(name, state, done)
+            Bridge:BotStrategy(name, state, "+stay,-follow", done)
+        end
+        local failed = {}
+        for index, name in ipairs(names) do
+            PBC:After(PARK_RECHECK + (index - 1) * 0.3, function()
+                stayOn(name, "N", function(ok, reason)
+                    if not ok then
+                        failed[#failed + 1] = name .. " (" .. tostring(reason) .. ")"
+                    else
+                        stayOn(name, "C", function() end)
+                    end
+                    if index == #names and #failed > 0 then
+                        PBC:Print("Park altbots: couldn't make sure these stay put: " .. table.concat(failed, ", ") .. ".")
+                    end
+                end)
+            end)
+        end
+    end,
+})
+
+add({
+    id = "logout",
+    group = "party",
+    name = "Logout altbots",
+    caps = { "BOT_TARGET_RESOLVE_V1", "BOT_LIFECYCLE_V1" },
+    bridge = true,
+    Visual = function()
+        return ICONS .. "Ability_Vanish"
+    end,
+    Tooltip = function(tooltip)
+        tooltip:AddLine("Your altbots in this group leave the group and log out. Asks first.", 1, 1, 1, true)
+        tooltip:AddLine("Random bots, players and parked altbots aren't affected.", 0.7, 0.7, 0.7, true)
+    end,
+    Click = function()
+        if PBC.busy.logout then
+            return
+        end
+        if #PBC.chardb.altbots == 0 then
+            noNames("Logout altbots", "Altbots")
+            return
+        end
+        if not needGroup("Logout altbots") then
+            return
+        end
+        local names = listedInGroup(PBC.chardb.altbots)
+        if #names == 0 then
+            PBC:Print("Logout altbots: none of your altbots are in your group.")
+            return
+        end
+        PBC:Confirm("Log out your altbots?\n\n" .. table.concat(names, ", ") .. " will leave the group and log out. Random bots, players and parked altbots stay.",
+            "Log out",
+            function()
+                if PBC.busy.logout then
+                    return
+                end
+                runBatch("logout", "Logout altbots", 0.1, nil, {
+                        FORBIDDEN        = "only the group leader can remove them",
+                        TARGET_IS_LEADER = "is the group leader, so can't be removed",
+                        BOT_NOT_ONLINE   = "already offline",
+                        NOT_IN_GROUP     = "no longer in your group",
+                        NOT_ALLOWED      = "not one of your characters",
+                    },
+                    function(bot, done)
+                        Bridge:Resolve(bot, function(ok, reason, guid)
+                            if not ok then
+                                done(false, reason)
+                                return
+                            end
+                            Bridge:LogoutFromGroup(guid, done)
+                        end)
+                    end,
+                    function(result)
+                        if result.bots > 0 then
+                            PBC:Print("Logout altbots: " .. plural(result.bots, "altbot") .. " logged out.")
+                        end
+                    end,
+                    names)
+            end)
+    end,
+})
+
+add({
+    id = "resetdungeons",
+    group = "party",
+    name = "Reset dungeons",
+    Visual = function()
+        return ICONS .. "INV_Misc_Key_03"
+    end,
+    Tooltip = function(tooltip)
+        tooltip:AddLine("Resets your normal dungeons, as the game's own Reset all instances does.", 1, 1, 1, true)
+        tooltip:AddLine("You need to be the group leader, and nobody may still be inside.", 0.7, 0.7, 0.7, true)
+    end,
+    Click = function()
+        if not isLeader() then
+            PBC:Print("Reset dungeons: only the group leader can reset dungeons.")
+            return
+        end
+        ResetInstances()
+    end,
+})
+
+add({
+    id = "resetraids",
+    group = "party",
+    name = "Reset raid lockouts",
+    Visual = function()
+        return ICONS .. "INV_Misc_Key_10"
+    end,
+    Tooltip = function(tooltip)
+        tooltip:AddLine("Removes raid and dungeon lockouts, except for the instance each of you is in. Asks first.", 1, 1, 1, true)
+        tooltip:AddLine("Left-click: you and every bot in your group", 1, 1, 1)
+        tooltip:AddLine("Right-click: you and everyone in your group, players too", 1, 1, 1)
+        tooltip:AddLine("Needs game master rights, or mod-levelsync with LevelSync.AllowRaidUnbind = 1.", 0.7, 0.7, 0.7, true)
+    end,
+    Click = function(mouseButton)
+        if PBC.resettingLockouts then
+            return
+        end
+        local everyone = (mouseButton == "RightButton")
+
+        local function ask(others, note)
+            local who = "you"
+            if #others > 0 then
+                who = "you and " .. table.concat(others, ", ")
+            end
+            PBC:Confirm("Reset raid lockouts?\n\nEvery raid and dungeon lockout is removed for " .. who
+                    .. ", except for the instance each is standing in. This can't be undone." .. (note or ""),
+                "Reset",
+                function()
+                    PBC:ResetLockouts(others)
+                end)
+        end
+
+        local members = otherMembers()
+        if #members == 0 or everyone then
+            ask(members)
+            return
+        end
+
+        -- Which of the others are bots? The bridge knows.
+        Bridge:Roster(function(bots)
+            if not bots then
+                ask({}, "\n\nThe bridge didn't say which of your group are bots, so only you. Right-click to include everyone.")
+                return
+            end
+            local others = {}
+            for _, name in ipairs(members) do
+                if bots[string.lower(name)] then
+                    others[#others + 1] = name
+                end
+            end
+            ask(others)
+        end)
     end,
 })
