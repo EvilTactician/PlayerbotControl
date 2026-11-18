@@ -889,7 +889,80 @@ local LIFECYCLE_REASONS = {
     TOO_MANY_PENDING = "too many logging in at once, try again",
     NOT_LEADER       = "only the group leader can invite",
     INVITE_FAILED    = "couldn't be invited",
+    STUCK            = "stuck in another group. A game master can free it with .group disband and the bot's name",
 }
+
+-- Invites a player and listens for the game's answer.
+--   done("ok")    invited
+--   done("busy")  "<name> is already in a group." (that line is hidden)
+local INVITE_WAIT = 1.5
+
+local function inviteAndCheck(name, done)
+    local busyText = string.format(ERR_ALREADY_IN_GROUP_S or "%s is already in a group.", name)
+    local sentText = string.format(ERR_INVITE_PLAYER_S or "You have invited %s to join your group.", name)
+    local result
+
+    local function filter(self, event, msg)
+        if msg == busyText then
+            result = result or "busy"
+            return true
+        end
+        if msg == sentText then
+            result = result or "ok"
+        end
+        return false
+    end
+
+    ChatFrame_AddMessageEventFilter("CHAT_MSG_SYSTEM", filter)
+    InviteUnit(name)
+
+    local started = GetTime()
+    local function check()
+        if not result and (GetTime() - started) < INVITE_WAIT then
+            PBC:After(0.2, check)
+            return
+        end
+        ChatFrame_RemoveMessageEventFilter("CHAT_MSG_SYSTEM", filter)
+        -- No answer either way: the invite most likely went out.
+        done(result or "ok")
+    end
+    PBC:After(0.2, check)
+end
+
+-- Takes a bot out of the group it is stuck in, for game masters only:
+-- ".group remove <name>". done(true) when the server took the command.
+local function freeFromGroup(name, done)
+    local command = ".group remove " .. name
+    local refused = false
+
+    local function systemFilter(self, event, msg)
+        if type(msg) == "string" and string.find(msg, "does not exist", 1, true) and string.find(msg, "group remove", 1, true) then
+            refused = true
+            return true
+        end
+        return false
+    end
+    -- A server that won't run the command for you hands it back as a whisper.
+    local function whisperFilter(self, event, msg)
+        if msg == command then
+            refused = true
+            return true
+        end
+        return false
+    end
+
+    ChatFrame_AddMessageEventFilter("CHAT_MSG_SYSTEM", systemFilter)
+    ChatFrame_AddMessageEventFilter("CHAT_MSG_WHISPER", whisperFilter)
+    ChatFrame_AddMessageEventFilter("CHAT_MSG_WHISPER_INFORM", whisperFilter)
+    PBC:Command(command)
+
+    PBC:After(1, function()
+        ChatFrame_RemoveMessageEventFilter("CHAT_MSG_SYSTEM", systemFilter)
+        ChatFrame_RemoveMessageEventFilter("CHAT_MSG_WHISPER", whisperFilter)
+        ChatFrame_RemoveMessageEventFilter("CHAT_MSG_WHISPER_INFORM", whisperFilter)
+        done(not refused)
+    end)
+end
 
 -- Logs in and invites the bots on one of the Quick group lists.
 local function quickGroup(listKey, label)
@@ -948,9 +1021,29 @@ local function quickGroup(listKey, label)
                         and (GetNumPartyMembers() + onTheirWay()) >= 4 then
                         ConvertToRaid()
                     end
-                    InviteUnit(name)
-                    invited[#invited + 1] = name
-                    done(true, "OK", 0)
+                    -- A bot can be stuck in a group without you. A game master
+                    -- can free it; then it is invited again.
+                    inviteAndCheck(name, function(result)
+                        if result == "ok" then
+                            invited[#invited + 1] = name
+                            done(true, "OK", 0)
+                            return
+                        end
+                        freeFromGroup(name, function(freed)
+                            if not freed then
+                                done(false, "STUCK")
+                                return
+                            end
+                            inviteAndCheck(name, function(again)
+                                if again == "ok" then
+                                    invited[#invited + 1] = name .. " (freed from another group)"
+                                    done(true, "OK", 0)
+                                else
+                                    done(false, "STUCK")
+                                end
+                            end)
+                        end)
+                    end)
                 elseif state == "CONNECTING" then
                     loggingIn[#loggingIn + 1] = name
                     done(true, "OK", 0)

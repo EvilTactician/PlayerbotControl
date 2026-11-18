@@ -1,10 +1,10 @@
-# Playerbot Control 1.0.1
+# Playerbot Control 1.0.2
 
 <div align="center">
 
 ![Interface Version](https://img.shields.io/badge/Interface-30300-blue)
 ![WoW Version](https://img.shields.io/badge/WoW-3.3.5a-orange)
-[![Version](https://img.shields.io/badge/Version-1.0.1-green)](https://github.com/EvilTactician/PlayerbotControl)
+[![Version](https://img.shields.io/badge/Version-1.0.2-green)](https://github.com/EvilTactician/PlayerbotControl)
 [![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
 
 **A World of Warcraft 3.3.5a addon with a small, clean control bar for your
@@ -97,7 +97,7 @@ server can't tell them apart from random bots, so you list their names in the op
 
 | Button | What it does |
 | --- | --- |
-| **Quick group** | Left-click: Quick group 1. Right-click: Quick group 2. Brings in the bots on that list: logs in the ones that are offline (they join you by themselves) and invites the ones that are online, such as parked ones. Turns your party into a raid when a sixth member needs it. |
+| **Quick group** | Left-click: Quick group 1. Right-click: Quick group 2. Brings in the bots on that list: logs in the ones that are offline (they join you by themselves) and invites the ones that are online, such as parked ones. Turns your party into a raid when a sixth member needs it. If a bot is stuck in another group without you, a game master's Quick group frees it (`.group remove`) and invites it again; otherwise it tells you which bot is stuck. |
 | **Park altbots** | Your listed altbots in the group stay where they are and leave the group, but stay online, for example at an inn. Random bots and players carry on as before. |
 | **Logout altbots** | Your listed altbots in the group leave it and log out. Asks first. Parked altbots, random bots and players aren't affected. |
 | **Reset dungeons** | The game's own reset of your normal dungeons. You need to be the group leader. |
@@ -220,7 +220,8 @@ Server settings some buttons depend on, all in `playerbots.conf`:
 | 0.3.x | Party: your altbot lists, Quick group, Park altbots, Logout altbots, resetting dungeons and raid lockouts. |
 | 0.4.x | Key bindings for Movement and Combat, unbound by default. |
 | 1.0.0 | Everything above, tested. The first full release. |
-| **1.0.1** (now) | Reset raid lockouts recognises a server that lets players use dot commands but not `.instance unbind`, and falls back to mod-levelsync at once. |
+| 1.0.1 | Reset raid lockouts recognises a server that lets players use dot commands but not `.instance unbind`, and falls back to mod-levelsync at once. |
+| **1.0.2** (now) | Quick group checks every invite: it frees a bot stuck in another group (game masters), names it otherwise, and only lists bots it actually invited. |
 
 ## Things to know
 
