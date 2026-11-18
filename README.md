@@ -1,15 +1,10 @@
-# Playerbot Control 0.4.2
-
-> [!WARNING]
-> **Early version (0.4.2).** Playerbot Control is in active development. This version has every group on
-> the bar and key bindings for Movement and Combat. 1.0.0 follows once it's tested (see
-> [Versions](#versions)).
+# Playerbot Control 1.0.0
 
 <div align="center">
 
 ![Interface Version](https://img.shields.io/badge/Interface-30300-blue)
 ![WoW Version](https://img.shields.io/badge/WoW-3.3.5a-orange)
-[![Version](https://img.shields.io/badge/Version-0.4.2-green)](https://github.com/EvilTactician/PlayerbotControl)
+[![Version](https://img.shields.io/badge/Version-1.0.0-green)](https://github.com/EvilTactician/PlayerbotControl)
 [![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
 
 **A World of Warcraft 3.3.5a addon with a small, clean control bar for your
@@ -215,8 +210,8 @@ Server settings some buttons depend on, all in `playerbots.conf`:
 | 0.1.x | The bar, its options, the minimap button, and the Movement and Combat buttons. |
 | 0.2.x | Group (Drink, Release, Revive, Roll, Reset) and Upkeep (Maintenance, Autogear, Sell, Level sync, Raid tokens). |
 | 0.3.x | Party: your altbot lists, Quick group, Park altbots, Logout altbots, resetting dungeons and raid lockouts. |
-| **0.4.0** (now) | Key bindings for Movement and Combat, unbound by default. |
-| **1.0.0** | Everything above, tested. |
+| 0.4.x | Key bindings for Movement and Combat, unbound by default. |
+| **1.0.0** (now) | Everything above, tested. The first full release. |
 
 ## Things to know
 
