@@ -31,7 +31,15 @@ Open the options with `/pbc`, or right-click the minimap button or the grip on t
 
 ## Screenshots
 
-Screenshots are coming soon.
+<table>
+<tr>
+<td align="center" valign="bottom"><img src="Screenshots/Bar.png" alt="The bar with every group closed"><br><sub>The bar, groups closed. Follow / Stay and Passive / Active sit on the bar itself.</sub></td>
+<td align="center" valign="bottom"><img src="Screenshots/BarFlee.png" alt="Movement and Combat opened, bots fleeing"><br><sub>Movement and Combat opened with a right-click, bots fleeing (red).</sub></td>
+<td align="center" valign="bottom"><img src="Screenshots/BarOpen.png" alt="Every group opened"><br><sub>Every group open.</sub></td>
+</tr>
+</table>
+
+<p align="center"><img src="Screenshots/OptionsAltbots.png" alt="The Altbots options page" width="640"><br><sub>The Altbots page, with your altbots and two Quick group lists.</sub></p>
 
 ## What's on the bar
 
