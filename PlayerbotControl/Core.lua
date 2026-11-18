@@ -44,15 +44,23 @@ local timers = {}
 local timerFrame = CreateFrame("Frame")
 timerFrame:Hide()
 timerFrame:SetScript("OnUpdate", function(self, elapsed)
-    local i = 1
-    while i <= #timers do
+    -- Collect what is due first and run it afterwards. A timer started by one
+    -- of those runs waits for the next frame, so a long frame (right after a
+    -- loading screen, a frame can take seconds) can't make a repeating timer
+    -- fire over and over within it.
+    local due
+    for i = #timers, 1, -1 do
         local timer = timers[i]
         timer.left = timer.left - elapsed
         if timer.left <= 0 then
             table.remove(timers, i)
+            due = due or {}
+            table.insert(due, 1, timer)
+        end
+    end
+    if due then
+        for _, timer in ipairs(due) do
             timer.fn()
-        else
-            i = i + 1
         end
     end
     if #timers == 0 then
