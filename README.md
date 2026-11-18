@@ -1,10 +1,10 @@
-# Playerbot Control 1.0.0
+# Playerbot Control 1.0.1
 
 <div align="center">
 
 ![Interface Version](https://img.shields.io/badge/Interface-30300-blue)
 ![WoW Version](https://img.shields.io/badge/WoW-3.3.5a-orange)
-[![Version](https://img.shields.io/badge/Version-1.0.0-green)](https://github.com/EvilTactician/PlayerbotControl)
+[![Version](https://img.shields.io/badge/Version-1.0.1-green)](https://github.com/EvilTactician/PlayerbotControl)
 [![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
 
 **A World of Warcraft 3.3.5a addon with a small, clean control bar for your
@@ -31,7 +31,15 @@ Open the options with `/pbc`, or right-click the minimap button or the grip on t
 
 ## Screenshots
 
-Screenshots are coming soon.
+<table>
+<tr>
+<td align="center" valign="bottom"><img src="Screenshots/Bar.png" alt="The bar with every group closed"><br><sub>The bar, groups closed. Follow / Stay and Passive / Active sit on the bar itself.</sub></td>
+<td align="center" valign="bottom"><img src="Screenshots/BarFlee.png" alt="Movement and Combat opened, bots fleeing"><br><sub>Movement and Combat opened with a right-click, bots fleeing (red).</sub></td>
+<td align="center" valign="bottom"><img src="Screenshots/BarOpen.png" alt="Every group opened"><br><sub>Every group open.</sub></td>
+</tr>
+</table>
+
+<p align="center"><img src="Screenshots/OptionsAltbots.png" alt="The Altbots options page" width="640"><br><sub>The Altbots page, with your altbots and two Quick group lists.</sub></p>
 
 ## What's on the bar
 
@@ -211,7 +219,8 @@ Server settings some buttons depend on, all in `playerbots.conf`:
 | 0.2.x | Group (Drink, Release, Revive, Roll, Reset) and Upkeep (Maintenance, Autogear, Sell, Level sync, Raid tokens). |
 | 0.3.x | Party: your altbot lists, Quick group, Park altbots, Logout altbots, resetting dungeons and raid lockouts. |
 | 0.4.x | Key bindings for Movement and Combat, unbound by default. |
-| **1.0.0** (now) | Everything above, tested. The first full release. |
+| 1.0.0 | Everything above, tested. The first full release. |
+| **1.0.1** (now) | Reset raid lockouts recognises a server that lets players use dot commands but not `.instance unbind`, and falls back to mod-levelsync at once. |
 
 ## Things to know
 

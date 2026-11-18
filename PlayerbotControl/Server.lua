@@ -277,7 +277,9 @@ function PBC:ResetLockouts(others)
             skipped = skipped + 1
             return true
         end
-        if not method and (string.find(lower, "no such command", 1, true) or string.find(lower, "incorrect syntax", 1, true)) then
+        -- "Command '...' does not exist": the server lets players use dot
+        -- commands, but not this one.
+        if not method and (string.find(lower, "does not exist", 1, true) or string.find(lower, "no such command", 1, true)) then
             PBC:After(0, useLevelSync)
             return true
         end
