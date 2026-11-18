@@ -1,14 +1,14 @@
-# Playerbot Control 0.3.1
+# Playerbot Control 0.3.2
 
 > [!WARNING]
-> **Early version (0.3.1).** Playerbot Control is in active development. This version has every group on
+> **Early version (0.3.2).** Playerbot Control is in active development. This version has every group on
 > the bar: Movement, Combat, Group, Upkeep and Party. Key bindings come next (see [Versions](#versions)).
 
 <div align="center">
 
 ![Interface Version](https://img.shields.io/badge/Interface-30300-blue)
 ![WoW Version](https://img.shields.io/badge/WoW-3.3.5a-orange)
-[![Version](https://img.shields.io/badge/Version-0.3.1-green)](https://github.com/EvilTactician/PlayerbotControl)
+[![Version](https://img.shields.io/badge/Version-0.3.2-green)](https://github.com/EvilTactician/PlayerbotControl)
 [![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
 
 **A World of Warcraft 3.3.5a addon with a small, clean control bar for your
@@ -87,8 +87,9 @@ Groups you leave open stay open. Anything that can't be undone asks first.
 
 ### Party
 
-Altbots are your own characters played as bots. The server can't tell them apart from random bots, so you
-list their names in the options (see [Altbots](#altbots)).
+Altbots are characters you have manually created, on your own account or another, linked account. The
+server can't tell them apart from random bots, so you list their names in the options (see
+[Altbots](#altbots)).
 
 | Button | What it does |
 | --- | --- |
@@ -96,7 +97,7 @@ list their names in the options (see [Altbots](#altbots)).
 | **Park altbots** | Your listed altbots in the group stay where they are and leave the group, but stay online, for example at an inn. Random bots and players carry on as before. |
 | **Logout altbots** | Your listed altbots in the group leave it and log out. Asks first. Parked altbots, random bots and players aren't affected. |
 | **Reset dungeons** | The game's own reset of your normal dungeons. You need to be the group leader. |
-| **Reset raid lockouts** | Removes your raid and heroic lockouts, except for the instance you're in. Uses `.instance unbind all` if you're a game master, otherwise `.levelsync unbindall`. Asks first. |
+| **Reset raid lockouts** | Removes raid and dungeon lockouts, except for the instance each character is in. Left-click: you and every bot in your group. Right-click: you and everyone in your group, players too. Uses `.instance unbind all` if you're a game master, otherwise `.levelsync unbindall`. Asks first, naming everyone it will reset, and prints one line with the total. |
 
 Park, Logout and inviting need you to be the group leader.
 

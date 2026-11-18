@@ -267,6 +267,33 @@ function Bridge:LogoutFromGroup(guid, callback)
     run(function(token) return "BOT_DISCONNECT_GROUP~" .. guid .. "~" .. token end, callback)
 end
 
+-- Asks which bots the bridge can see: yours, and random bots in your group.
+-- The callback gets a table of [lower-case name] = true, or nil on failure.
+local rosterCallback
+function Bridge:Roster(callback)
+    if self.status ~= "ready" then
+        callback(nil)
+        return
+    end
+    if rosterCallback then
+        local previous = rosterCallback
+        rosterCallback = function(bots)
+            previous(bots)
+            callback(bots)
+        end
+        return
+    end
+    rosterCallback = callback
+    send("GET", "ROSTER")
+    PBC:After(ACK_TIMEOUT, function()
+        if rosterCallback then
+            local waiting = rosterCallback
+            rosterCallback = nil
+            waiting(nil)
+        end
+    end)
+end
+
 -------------------------------------------------------------------------------
 -- Incoming
 -------------------------------------------------------------------------------
@@ -320,6 +347,19 @@ function Bridge:OnAddonMessage(prefix, message, channel, sender)
         -- token ~ status ~ reason ~ number ~ number
         local fields = split(payload, "~")
         resolve(fields[1], fields[2] == "OK", decode(fields[3] or "FAILED"), tonumber(fields[4]) or 0)
+    elseif opcode == "ROSTER" then
+        -- name,class,level,... ; name,class,level,...
+        if rosterCallback then
+            local waiting, bots = rosterCallback, {}
+            rosterCallback = nil
+            for entry in string.gmatch(payload, "[^;]+") do
+                local name = string.match(entry, "^([^,]+)")
+                if name then
+                    bots[string.lower(name)] = true
+                end
+            end
+            waiting(bots)
+        end
     elseif opcode == "BOT_TARGET_RESOLVE" then
         -- token ~ status ~ reason ~ name ~ guid ~ state
         local fields = split(payload, "~")

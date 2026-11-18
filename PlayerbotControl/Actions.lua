@@ -1069,6 +1069,9 @@ add({
                 PBC:Refresh()
                 return
             end
+            if reason == "PARTIAL" then
+                PBC:Print("Park altbots: only " .. succeeded .. " of " .. matched .. " bots took the Stay order, so a parked altbot may keep following you.")
+            end
             PBC:After(1.5, function()
                 PBC.busy.park = nil
                 PBC:Print("Park altbots: " .. table.concat(names, ", ") .. " parked.")
@@ -1188,14 +1191,49 @@ add({
         return ICONS .. "INV_Misc_Key_10"
     end,
     Tooltip = function(tooltip)
-        tooltip:AddLine("Removes your raid and heroic dungeon lockouts, except for the instance you are in. Asks first.", 1, 1, 1, true)
+        tooltip:AddLine("Removes raid and dungeon lockouts, except for the instance each of you is in. Asks first.", 1, 1, 1, true)
+        tooltip:AddLine("Left-click: you and every bot in your group", 1, 1, 1)
+        tooltip:AddLine("Right-click: you and everyone in your group, players too", 1, 1, 1)
         tooltip:AddLine("Needs game master rights, or mod-levelsync with LevelSync.AllowRaidUnbind = 1.", 0.7, 0.7, 0.7, true)
     end,
-    Click = function()
-        PBC:Confirm("Reset your raid lockouts?\n\nEvery raid and dungeon lockout on this character is removed, except for the instance you are standing in. This can't be undone.",
-            "Reset",
-            function()
-                PBC:ResetLockouts()
-            end)
+    Click = function(mouseButton)
+        if PBC.resettingLockouts then
+            return
+        end
+        local everyone = (mouseButton == "RightButton")
+
+        local function ask(others, note)
+            local who = "you"
+            if #others > 0 then
+                who = "you and " .. table.concat(others, ", ")
+            end
+            PBC:Confirm("Reset raid lockouts?\n\nEvery raid and dungeon lockout is removed for " .. who
+                    .. ", except for the instance each is standing in. This can't be undone." .. (note or ""),
+                "Reset",
+                function()
+                    PBC:ResetLockouts(others)
+                end)
+        end
+
+        local members = otherMembers()
+        if #members == 0 or everyone then
+            ask(members)
+            return
+        end
+
+        -- Which of the others are bots? The bridge knows.
+        Bridge:Roster(function(bots)
+            if not bots then
+                ask({}, "\n\nThe bridge didn't say which of your group are bots, so only you. Right-click to include everyone.")
+                return
+            end
+            local others = {}
+            for _, name in ipairs(members) do
+                if bots[string.lower(name)] then
+                    others[#others + 1] = name
+                end
+            end
+            ask(others)
+        end)
     end,
 })

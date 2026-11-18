@@ -313,7 +313,7 @@ end
 
 function Options:CreateAltbotsPanel()
     local sub = subPanel("Altbots", PBC.title .. ": Altbots",
-        "Altbots are your own characters played as bots. The server can't tell them apart from random bots, so list them here.\n\n"
+        "Altbots are characters you have manually created either on your account or another, linked account. The server can't tell them apart from random bots, so list them here to use this addon to its full extent.\n\n"
             .. "Type one name per line. Commas or spaces between names work too, and capitals don't matter. "
             .. "Changes are saved as you type. A name can be on more than one list. These lists belong to the character you're playing.",
         56)

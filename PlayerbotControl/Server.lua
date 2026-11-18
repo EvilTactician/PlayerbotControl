@@ -129,58 +129,138 @@ end
 -------------------------------------------------------------------------------
 -- Raid and dungeon lockouts
 --
--- Game masters can use the core's ".instance unbind all". Everyone else needs
--- mod-levelsync's ".levelsync unbindall", which the server has to allow. The
--- first is tried, and if the server won't take it, the second. Both name you,
--- so a selected target is never the one unbound. Both keep the lockout of the
--- instance you are standing in.
+-- Game masters can use the core's ".instance unbind all <name>". Everyone
+-- else needs mod-levelsync's ".levelsync unbindall <name>", which the server
+-- has to allow. The first is tried on you, and if the server won't take it,
+-- the second. Then the same one is sent for everyone else. Each is given a
+-- name, so a selected target is never the one unbound. Both keep the lockout
+-- of the instance that character is standing in.
+--
+-- The server answers every command with a few lines. Those are kept out of
+-- the chat window and added up into one line at the end.
 -------------------------------------------------------------------------------
 
-local UNBIND_WAIT = 3
+local DETECT_WAIT = 3
+local SEND_GAP = 0.3
+local FINISH_WAIT = 2
 
-function PBC:ResetLockouts()
+local function plain(msg)
+    return (string.gsub(string.gsub(msg, "|c%x%x%x%x%x%x%x%x", ""), "|r", ""))
+end
+
+-- others: names besides you. They need to be online for mod-levelsync.
+function PBC:ResetLockouts(others)
     local me = UnitName("player")
-    if not me then
+    if not me or self.resettingLockouts then
         return
     end
-    local gmCommand = ".instance unbind all " .. me
-    local finished = false
+    self.resettingLockouts = true
 
-    local function refused(msg)
-        local lower = string.lower(msg)
-        return string.find(lower, "no such command", 1, true) ~= nil
-            or string.find(lower, "incorrect syntax", 1, true) ~= nil
-    end
+    local method          -- "gm" or "levelsync" once known
+    local finished = false
+    local removed, answered, skipped = 0, 0, 0
+    local disabled = false
 
     local systemFilter, whisperFilter
-    local function stopWatching()
-        ChatFrame_RemoveMessageEventFilter("CHAT_MSG_SYSTEM", systemFilter)
-        ChatFrame_RemoveMessageEventFilter("CHAT_MSG_WHISPER", whisperFilter)
-        ChatFrame_RemoveMessageEventFilter("CHAT_MSG_WHISPER_INFORM", whisperFilter)
-    end
 
-    local function fallBack()
+    local function finish(message)
         if finished then
             return
         end
         finished = true
-        if PBC.modules.levelsync then
-            PBC:Command(".levelsync unbindall " .. me)
-        else
-            PBC:Print("Reset raid lockouts: the server didn't allow it. It needs game master rights, or mod-levelsync with LevelSync.AllowRaidUnbind = 1.")
+        ChatFrame_RemoveMessageEventFilter("CHAT_MSG_SYSTEM", systemFilter)
+        ChatFrame_RemoveMessageEventFilter("CHAT_MSG_WHISPER", whisperFilter)
+        ChatFrame_RemoveMessageEventFilter("CHAT_MSG_WHISPER_INFORM", whisperFilter)
+        PBC.resettingLockouts = nil
+        PBC:Print("Reset raid lockouts: " .. message)
+    end
+
+    local function summary()
+        if disabled then
+            finish("the server has mod-levelsync's unbind switched off. It needs LevelSync.AllowRaidUnbind = 1, or game master rights.")
+            return
         end
+        local who = (#others > 0) and ("you and " .. #others .. ((#others == 1) and " other" or " others")) or "you"
+        local text = removed .. ((removed == 1) and " lockout" or " lockouts") .. " removed for " .. who .. "."
+        if skipped > 0 then
+            text = text .. " " .. skipped .. " couldn't be found (offline?)."
+        end
+        finish(text)
+    end
+
+    local function command(name)
+        if method == "gm" then
+            return ".instance unbind all " .. name
+        end
+        return ".levelsync unbindall " .. name
+    end
+
+    -- Everyone after you, a moment apart, then the summary.
+    local function sendOthers()
+        for index, name in ipairs(others) do
+            PBC:After(index * SEND_GAP, function()
+                if not finished then
+                    PBC:Command(command(name))
+                end
+            end)
+        end
+        PBC:After(#others * SEND_GAP + FINISH_WAIT, summary)
+    end
+
+    local function useLevelSync()
+        if method or finished then
+            return
+        end
+        if not PBC.modules.levelsync then
+            finish("the server didn't allow it. It needs game master rights, or mod-levelsync with LevelSync.AllowRaidUnbind = 1.")
+            return
+        end
+        method = "levelsync"
+        PBC:Command(command(me))
+        sendOthers()
     end
 
     systemFilter = function(self, event, msg)
         if finished or type(msg) ~= "string" then
             return false
         end
-        if string.find(msg, "instances unbound:", 1, true) == 1 then
-            finished = true
-            return false
+        local text = plain(msg)
+        local lower = string.lower(text)
+
+        -- The core's answers
+        local count = string.match(text, "^instances unbound: (%d+)")
+        if count then
+            removed = removed + tonumber(count)
+            answered = answered + 1
+            if not method then
+                method = "gm"
+                sendOthers()
+            end
+            return true
         end
-        if refused(msg) then
-            PBC:After(0, fallBack)
+        if string.find(text, "unbinding map:", 1, true) == 1 then
+            return true
+        end
+        if string.find(lower, "player not found", 1, true) then
+            skipped = skipped + 1
+            return true
+        end
+        if not method and (string.find(lower, "no such command", 1, true) or string.find(lower, "incorrect syntax", 1, true)) then
+            PBC:After(0, useLevelSync)
+            return true
+        end
+
+        -- mod-levelsync's answers
+        if string.find(text, "[LevelSync]", 1, true) then
+            count = string.match(text, "Unbound (%d+) instance")
+            if count then
+                removed = removed + tonumber(count)
+                answered = answered + 1
+            elseif string.find(text, "not found or offline", 1, true) then
+                skipped = skipped + 1
+            elseif string.find(text, "disabled", 1, true) then
+                disabled = true
+            end
             return true
         end
         return false
@@ -188,8 +268,10 @@ function PBC:ResetLockouts()
 
     -- A server that won't run the command for you hands it back as a whisper.
     whisperFilter = function(self, event, msg)
-        if msg == gmCommand then
-            PBC:After(0, fallBack)
+        if type(msg) == "string" and string.find(msg, ".instance unbind all ", 1, true) == 1 then
+            if not method then
+                PBC:After(0, useLevelSync)
+            end
             return true
         end
         return false
@@ -198,10 +280,7 @@ function PBC:ResetLockouts()
     ChatFrame_AddMessageEventFilter("CHAT_MSG_SYSTEM", systemFilter)
     ChatFrame_AddMessageEventFilter("CHAT_MSG_WHISPER", whisperFilter)
     ChatFrame_AddMessageEventFilter("CHAT_MSG_WHISPER_INFORM", whisperFilter)
-    self:Command(gmCommand)
+    self:Command(".instance unbind all " .. me)
 
-    self:After(UNBIND_WAIT, function()
-        stopWatching()
-        fallBack()
-    end)
+    self:After(DETECT_WAIT, useLevelSync)
 end
