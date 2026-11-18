@@ -133,6 +133,8 @@ function Options:Create()
 
     local more = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
     more:SetPoint("TOPLEFT", confirm, "BOTTOMLEFT", 0, -16)
+    more:SetWidth(560)
+    more:SetJustifyH("LEFT")
     more:SetText("Switching buttons on and off, and your altbot names, are on the Buttons and Altbots pages under this one.")
 
     panel:SetScript("OnShow", function()
@@ -146,7 +148,7 @@ function Options:Create()
 end
 
 -- A page listed under the main one in Interface > AddOns.
-local function subPanel(name, heading, intro)
+local function subPanel(name, heading, intro, introHeight)
     local sub = CreateFrame("Frame", nil, UIParent)
     sub.name = name
     sub.parent = PBC.title
@@ -158,8 +160,10 @@ local function subPanel(name, heading, intro)
 
     local text = sub:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
     text:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
-    text:SetPoint("RIGHT", sub, "RIGHT", -16, 0)
+    text:SetWidth(560)
+    text:SetHeight(introHeight or 14)
     text:SetJustifyH("LEFT")
+    text:SetJustifyV("TOP")
     text:SetText(intro)
     sub.intro = text
 
@@ -233,21 +237,27 @@ end
 
 local nameBoxes = {}
 
-local function addNameBox(parent, anchor, label, tip, listKey)
+-- A heading, a short note under it, and the box. x and y place the heading
+-- relative to the bottom-left of anchor.
+local BOX_WIDTH = 220
+
+local function addNameBox(parent, anchor, x, y, label, tip, listKey)
     local heading = parent:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    heading:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -16)
+    heading:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", x, y)
     heading:SetText(label)
 
     local note = parent:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
     note:SetPoint("TOPLEFT", heading, "BOTTOMLEFT", 0, -4)
-    note:SetPoint("RIGHT", parent, "RIGHT", -16, 0)
+    note:SetWidth(BOX_WIDTH)
+    note:SetHeight(28)
     note:SetJustifyH("LEFT")
+    note:SetJustifyV("TOP")
     note:SetText(tip)
 
     local box = CreateFrame("Frame", nil, parent)
-    box:SetPoint("TOPLEFT", note, "BOTTOMLEFT", 0, -6)
-    box:SetWidth(220)
-    box:SetHeight(130)
+    box:SetPoint("TOPLEFT", note, "BOTTOMLEFT", 0, -4)
+    box:SetWidth(BOX_WIDTH)
+    box:SetHeight(120)
     box:SetBackdrop({
         bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
         edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
@@ -265,8 +275,8 @@ local function addNameBox(parent, anchor, label, tip, listKey)
     edit:SetMultiLine(true)
     edit:SetAutoFocus(false)
     edit:SetFontObject(ChatFontNormal)
-    edit:SetWidth(180)
-    edit:SetHeight(110)
+    edit:SetWidth(BOX_WIDTH - 40)
+    edit:SetHeight(100)
     scroll:SetScrollChild(edit)
 
     local function save()
@@ -303,15 +313,21 @@ end
 
 function Options:CreateAltbotsPanel()
     local sub = subPanel("Altbots", PBC.title .. ": Altbots",
-        "Altbots are your own characters played as bots. The server can't tell them apart from random bots, so list them here. One name per line. These lists belong to the character you're playing.")
+        "Altbots are your own characters played as bots. The server can't tell them apart from random bots, so list them here.\n\n"
+            .. "Type one name per line. Commas or spaces between names work too, and capitals don't matter. "
+            .. "Changes are saved as you type. A name can be on more than one list. These lists belong to the character you're playing.",
+        56)
     self.altbotsPanel = sub
 
-    local altbots = addNameBox(sub, sub.intro, "Altbots",
+    local altbots = addNameBox(sub, sub.intro, 0, -12, "Altbots",
         "Park altbots and Logout altbots act on these names when they're in your group.",
         "altbots")
-    addNameBox(sub, altbots, "Quick group",
-        "Quick group logs these in and invites them. Keep it to the few you group with most.",
+    addNameBox(sub, altbots, 0, -16, "Quick group 1",
+        "Left-click Quick group to log these in and invite them.",
         "quickgroup")
+    addNameBox(sub, altbots, BOX_WIDTH + 30, -16, "Quick group 2",
+        "Right-click Quick group to log these in and invite them.",
+        "quickgroup2")
 
     InterfaceOptions_AddCategory(sub)
 end

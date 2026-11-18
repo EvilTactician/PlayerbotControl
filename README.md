@@ -1,14 +1,14 @@
-# Playerbot Control 0.3.0
+# Playerbot Control 0.3.1
 
 > [!WARNING]
-> **Early version (0.3.0).** Playerbot Control is in active development. This version has every group on
+> **Early version (0.3.1).** Playerbot Control is in active development. This version has every group on
 > the bar: Movement, Combat, Group, Upkeep and Party. Key bindings come next (see [Versions](#versions)).
 
 <div align="center">
 
 ![Interface Version](https://img.shields.io/badge/Interface-30300-blue)
 ![WoW Version](https://img.shields.io/badge/WoW-3.3.5a-orange)
-[![Version](https://img.shields.io/badge/Version-0.3.0-green)](https://github.com/EvilTactician/PlayerbotControl)
+[![Version](https://img.shields.io/badge/Version-0.3.1-green)](https://github.com/EvilTactician/PlayerbotControl)
 [![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
 
 **A World of Warcraft 3.3.5a addon with a small, clean control bar for your
@@ -92,7 +92,7 @@ list their names in the options (see [Altbots](#altbots)).
 
 | Button | What it does |
 | --- | --- |
-| **Quick group** | Brings in the bots on your Quick group list: logs in the ones that are offline (they join you by themselves) and invites the ones that are online, such as parked ones. Turns your party into a raid when a sixth member needs it. |
+| **Quick group** | Left-click: Quick group 1. Right-click: Quick group 2. Brings in the bots on that list: logs in the ones that are offline (they join you by themselves) and invites the ones that are online, such as parked ones. Turns your party into a raid when a sixth member needs it. |
 | **Park altbots** | Your listed altbots in the group stay where they are and leave the group, but stay online, for example at an inn. Random bots and players carry on as before. |
 | **Logout altbots** | Your listed altbots in the group leave it and log out. Asks first. Parked altbots, random bots and players aren't affected. |
 | **Reset dungeons** | The game's own reset of your normal dungeons. You need to be the group leader. |
@@ -120,15 +120,17 @@ Under **Interface > AddOns > Playerbot Control**, or `/pbc`:
 - **Attack also marks the target with Skull**
 - **Confirm orders in chat**: off by default. Failures are always printed, with the reason.
 - **Buttons** page: switch each button on or off. A group with no buttons left disappears.
-- **Altbots** page: two name lists, one name per line. They belong to the character you're playing.
+- **Altbots** page: your name lists. They belong to the character you're playing.
 
 ### Altbots
 
 - **Altbots:** every altbot you might group with. Park altbots and Logout altbots act on these names when
   they're in your group.
-- **Quick group:** the few you group with most. Quick group logs these in and invites them.
+- **Quick group 1** and **Quick group 2:** two small sets you often group with. Left-click Quick group for
+  the first, right-click for the second.
 
-A name can be on both lists.
+Type one name per line. Commas or spaces between names work too, capitals don't matter, and changes are
+saved as you type. A name can be on more than one list.
 
 | Command | What it does |
 | --- | --- |
@@ -203,7 +205,7 @@ Server settings some buttons depend on, all in `playerbots.conf`:
 | --- | --- |
 | 0.1.x | The bar, its options, the minimap button, and the Movement and Combat buttons. |
 | 0.2.x | Group (Drink, Release, Revive, Roll, Reset) and Upkeep (Maintenance, Autogear, Sell, Level sync, Raid tokens). |
-| **0.3.0** (now) | Party: your altbot lists, Quick group, Park altbots, Logout altbots, resetting dungeons and raid lockouts. |
+| **0.3.x** (now) | Party: your altbot lists, Quick group, Park altbots, Logout altbots, resetting dungeons and raid lockouts. |
 | 0.4.0 | Key bindings, unbound by default. |
 | **1.0.0** | Everything above, tested. |
 

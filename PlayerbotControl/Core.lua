@@ -149,6 +149,9 @@ local function loadSettings()
     if type(PBC.chardb.quickgroup) ~= "table" then
         PBC.chardb.quickgroup = {}
     end
+    if type(PBC.chardb.quickgroup2) ~= "table" then
+        PBC.chardb.quickgroup2 = {}
+    end
 
     local saved = PBC.chardb.state
     local logoutAt = PBC.chardb.logoutAt

@@ -847,7 +847,7 @@ add({
 -- Altbots are your own characters played as bots. The bridge can't tell them
 -- from random bots, so the names come from two lists in the options:
 --   Altbots       Park and Logout act on these, when they are in your group
---   Quick group   the few that Quick group logs in and invites
+--   Quick group   two short lists that Quick group logs in and invites
 -------------------------------------------------------------------------------
 
 local function isLeader()
@@ -891,6 +891,104 @@ local LIFECYCLE_REASONS = {
     INVITE_FAILED    = "couldn't be invited",
 }
 
+-- Logs in and invites the bots on one of the Quick group lists.
+local function quickGroup(listKey, label)
+    if PBC.busy.quickgroup then
+        return
+    end
+    local list = PBC.chardb[listKey]
+    if #list == 0 then
+        noNames(label, label)
+        return
+    end
+
+    local inGroup = groupNames()
+    local wanted = {}
+    for _, name in ipairs(list) do
+        if not inGroup[string.lower(name)] then
+            wanted[#wanted + 1] = name
+        end
+    end
+    if #wanted == 0 then
+        PBC:Print(label .. ": everyone on the list is already in your group.")
+        return
+    end
+
+    local invited, loggingIn = {}, {}
+
+    -- Bots asked to join that haven't arrived yet.
+    local function onTheirWay()
+        local members, count = groupNames(), 0
+        for _, names in ipairs({ invited, loggingIn }) do
+            for _, name in ipairs(names) do
+                if not members[string.lower(name)] then
+                    count = count + 1
+                end
+            end
+        end
+        return count
+    end
+
+    runBatch("quickgroup", label, 0.1, nil, LIFECYCLE_REASONS,
+        function(bot, done)
+            Bridge:Resolve(bot, function(ok, reason, guid, state, name)
+                if not ok then
+                    done(false, reason)
+                    return
+                end
+                name = (name ~= "" and name) or bot
+                if state == "ONLINE" then
+                    -- Online but not with you, such as a parked bot.
+                    if not isLeader() then
+                        done(false, "NOT_LEADER")
+                        return
+                    end
+                    -- A party holds five; a sixth needs a raid.
+                    if PBC:InGroup() and not PBC:InRaid()
+                        and (GetNumPartyMembers() + onTheirWay()) >= 4 then
+                        ConvertToRaid()
+                    end
+                    InviteUnit(name)
+                    invited[#invited + 1] = name
+                    done(true, "OK", 0)
+                elseif state == "CONNECTING" then
+                    loggingIn[#loggingIn + 1] = name
+                    done(true, "OK", 0)
+                elseif reason == "IN_USE" then
+                    done(false, "IN_USE")
+                else
+                    Bridge:Login(guid, function(ok2, reason2)
+                        if ok2 then
+                            loggingIn[#loggingIn + 1] = name
+                        end
+                        done(ok2, reason2, 0)
+                    end)
+                end
+            end)
+        end,
+        function()
+            local parts = {}
+            if #loggingIn > 0 then
+                parts[#parts + 1] = "logging in " .. table.concat(loggingIn, ", ")
+            end
+            if #invited > 0 then
+                parts[#parts + 1] = "inviting " .. table.concat(invited, ", ")
+            end
+            if #parts > 0 then
+                PBC:Print(label .. ": " .. table.concat(parts, "; ") .. ".")
+            end
+        end,
+        wanted)
+end
+
+local function listLine(tooltip, label, list)
+    if #list > 0 then
+        tooltip:AddLine(label .. ": " .. table.concat(list, ", "), 0.7, 0.7, 0.7, true)
+    else
+        tooltip:AddLine(label .. ": empty. Add names in the options under Altbots.", 1, 0.6, 0, true)
+    end
+end
+
 add({
     id = "quickgroup",
     group = "party",
@@ -901,89 +999,18 @@ add({
         return ICONS .. "INV_Misc_GroupNeedMore"
     end,
     Tooltip = function(tooltip)
-        tooltip:AddLine("Brings in the bots on your Quick group list: logs in the ones that are offline and invites the ones that are online.", 1, 1, 1, true)
-        local list = PBC.chardb.quickgroup
-        if #list > 0 then
-            tooltip:AddLine(table.concat(list, ", "), 0.7, 0.7, 0.7, true)
-        else
-            tooltip:AddLine("The list is empty. Add names in the options under Altbots.", 1, 0.6, 0, true)
-        end
+        tooltip:AddLine("Logs in the bots on a Quick group list and invites the ones already online.", 1, 1, 1, true)
+        tooltip:AddLine("Left-click: Quick group 1", 1, 1, 1)
+        tooltip:AddLine("Right-click: Quick group 2", 1, 1, 1)
+        listLine(tooltip, "Quick group 1", PBC.chardb.quickgroup)
+        listLine(tooltip, "Quick group 2", PBC.chardb.quickgroup2)
     end,
-    Click = function()
-        if PBC.busy.quickgroup then
-            return
+    Click = function(mouseButton)
+        if mouseButton == "RightButton" then
+            quickGroup("quickgroup2", "Quick group 2")
+        else
+            quickGroup("quickgroup", "Quick group 1")
         end
-        local list = PBC.chardb.quickgroup
-        if #list == 0 then
-            noNames("Quick group", "Quick group")
-            return
-        end
-
-        local inGroup = groupNames()
-        local wanted, here = {}, 0
-        for _, name in ipairs(list) do
-            if inGroup[string.lower(name)] then
-                here = here + 1
-            else
-                wanted[#wanted + 1] = name
-            end
-        end
-        if #wanted == 0 then
-            PBC:Print("Quick group: everyone on the list is already in your group.")
-            return
-        end
-
-        local invited, loggingIn = {}, {}
-        runBatch("quickgroup", "Quick group", 0.1, nil, LIFECYCLE_REASONS,
-            function(bot, done)
-                Bridge:Resolve(bot, function(ok, reason, guid, state, name)
-                    if not ok then
-                        done(false, reason)
-                        return
-                    end
-                    name = (name ~= "" and name) or bot
-                    if state == "ONLINE" then
-                        -- Online but not with you, such as a parked bot.
-                        if not isLeader() then
-                            done(false, "NOT_LEADER")
-                            return
-                        end
-                        -- A party holds five; a sixth needs a raid.
-                        if PBC:InGroup() and not PBC:InRaid()
-                            and (GetNumPartyMembers() + #invited) >= 4 then
-                            ConvertToRaid()
-                        end
-                        InviteUnit(name)
-                        invited[#invited + 1] = name
-                        done(true, "OK", 0)
-                    elseif state == "CONNECTING" then
-                        loggingIn[#loggingIn + 1] = name
-                        done(true, "OK", 0)
-                    elseif reason == "IN_USE" then
-                        done(false, "IN_USE")
-                    else
-                        Bridge:Login(guid, function(ok2, reason2)
-                            if ok2 then
-                                loggingIn[#loggingIn + 1] = name
-                            end
-                            done(ok2, reason2, 0)
-                        end)
-                    end
-                end)
-            end,
-            function()
-                local parts = {}
-                if #loggingIn > 0 then
-                    parts[#parts + 1] = "logging in " .. table.concat(loggingIn, ", ")
-                end
-                if #invited > 0 then
-                    parts[#parts + 1] = "inviting " .. table.concat(invited, ", ")
-                end
-                if #parts > 0 then
-                    PBC:Print("Quick group: " .. table.concat(parts, "; ") .. ".")
-                end
-            end,
-            wanted)
     end,
 })
 
@@ -1022,8 +1049,17 @@ add({
             return
         end
 
+        if not Bridge:IsReady() then
+            report("Park altbots", false, Bridge.status == "connecting" and "CONNECTING" or "NO_BRIDGE")
+            Bridge:Hello()
+            return
+        end
+
         -- There is no Stay for a single bot, so everyone is told to stay, the
         -- altbots leave, and the rest are given back what they were doing.
+        -- The game only lets an addon remove group members straight from a
+        -- click, so they're removed now, right behind the Stay order. The
+        -- server handles the two in the order they were sent.
         local previous = PBC.state.mode
         setBusy("park", true)
         Bridge:StayOrder(function(ok, reason, matched, succeeded)
@@ -1032,9 +1068,6 @@ add({
                 report("Park altbots", ok, reason, matched, succeeded)
                 PBC:Refresh()
                 return
-            end
-            for _, name in ipairs(names) do
-                UninviteUnit(name)
             end
             PBC:After(1.5, function()
                 PBC.busy.park = nil
@@ -1060,6 +1093,9 @@ add({
                 restorePassive()
             end)
         end)
+        for _, name in ipairs(names) do
+            UninviteUnit(name)
+        end
     end,
 })
 
