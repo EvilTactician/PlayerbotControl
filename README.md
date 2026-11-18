@@ -1,10 +1,10 @@
-# Playerbot Control 1.0.0
+# Playerbot Control 1.0.1
 
 <div align="center">
 
 ![Interface Version](https://img.shields.io/badge/Interface-30300-blue)
 ![WoW Version](https://img.shields.io/badge/WoW-3.3.5a-orange)
-[![Version](https://img.shields.io/badge/Version-1.0.0-green)](https://github.com/EvilTactician/PlayerbotControl)
+[![Version](https://img.shields.io/badge/Version-1.0.1-green)](https://github.com/EvilTactician/PlayerbotControl)
 [![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
 
 **A World of Warcraft 3.3.5a addon with a small, clean control bar for your
@@ -219,7 +219,8 @@ Server settings some buttons depend on, all in `playerbots.conf`:
 | 0.2.x | Group (Drink, Release, Revive, Roll, Reset) and Upkeep (Maintenance, Autogear, Sell, Level sync, Raid tokens). |
 | 0.3.x | Party: your altbot lists, Quick group, Park altbots, Logout altbots, resetting dungeons and raid lockouts. |
 | 0.4.x | Key bindings for Movement and Combat, unbound by default. |
-| **1.0.0** (now) | Everything above, tested. The first full release. |
+| 1.0.0 | Everything above, tested. The first full release. |
+| **1.0.1** (now) | Reset raid lockouts recognises a server that lets players use dot commands but not `.instance unbind`, and falls back to mod-levelsync at once. |
 
 ## Things to know
 
