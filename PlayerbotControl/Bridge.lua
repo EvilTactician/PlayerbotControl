@@ -40,6 +40,9 @@ local ACKS = {
     STRATEGY_ACK     = { token = 3, counts = 5 },
 }
 
+-- Strategy lists asked for by bot name: [lower-case name] = { callbacks }
+local stateWaiting = {}
+
 -------------------------------------------------------------------------------
 -- Helpers
 -------------------------------------------------------------------------------
@@ -255,6 +258,39 @@ function Bridge:BotStrategy(bot, state, changes, callback)
     run(function(token) return "STRATEGY~BOT~" .. encode(bot) .. "~" .. token .. "~" .. state .. "~" .. changes end, callback)
 end
 
+-- Runs a raid-icon command on one bot, such as "pull rti target".
+-- The bridge only says it passed the command on.
+function Bridge:BotRti(bot, command, callback)
+    run(function(token) return "RTI~BOT~" .. encode(bot) .. "~" .. token .. "~" .. encode(command) end, callback)
+end
+
+-- Asks for one bot's strategy lists. The callback gets (combat, nonCombat)
+-- as tables of [strategy name] = true, or nil when the bridge doesn't know
+-- the name as a bot of yours or doesn't answer.
+function Bridge:BotStrategies(bot, callback)
+    if self.status ~= "ready" then
+        callback(nil)
+        return
+    end
+    local key = string.lower(bot)
+    local waiting = stateWaiting[key]
+    if waiting then
+        waiting[#waiting + 1] = callback
+        return
+    end
+    stateWaiting[key] = { callback }
+    send("GET", "STATE~" .. bot)
+    PBC:After(ACK_TIMEOUT, function()
+        local callbacks = stateWaiting[key]
+        if callbacks then
+            stateWaiting[key] = nil
+            for _, waitingCallback in ipairs(callbacks) do
+                waitingCallback(nil)
+            end
+        end
+    end)
+end
+
 -- Looks a character up by name. Only characters you may control as bots
 -- are found. The callback gets (ok, reason, guid, state, name), where state
 -- is ONLINE, OFFLINE or CONNECTING and name is spelt as the server has it.
@@ -352,6 +388,32 @@ function Bridge:OnAddonMessage(prefix, message, channel, sender)
         -- token ~ status ~ reason ~ number ~ number
         local fields = split(payload, "~")
         resolve(fields[1], fields[2] == "OK", decode(fields[3] or "FAILED"), tonumber(fields[4]) or 0)
+    elseif opcode == "RTI_ACK" then
+        -- scope ~ target ~ token ~ executed ~ command
+        local fields = split(payload, "~")
+        local executed = tonumber(fields[4]) or 0
+        resolve(fields[3], executed > 0, executed > 0 and "OK" or "NO_MATCH", executed, executed, 0)
+    elseif opcode == "STATE" then
+        -- name ~ combat strategies ~ non-combat strategies (", " between)
+        local fields = split(payload, "~")
+        local key = string.lower(fields[1] or "")
+        local callbacks = stateWaiting[key]
+        if callbacks then
+            stateWaiting[key] = nil
+            local combat, nonCombat
+            if (fields[2] or "") ~= "" or (fields[3] or "") ~= "" then
+                combat, nonCombat = {}, {}
+                for name in string.gmatch(fields[2] or "", "[^,]+") do
+                    combat[(string.gsub(name, "^%s*(.-)%s*$", "%1"))] = true
+                end
+                for name in string.gmatch(fields[3] or "", "[^,]+") do
+                    nonCombat[(string.gsub(name, "^%s*(.-)%s*$", "%1"))] = true
+                end
+            end
+            for _, callback in ipairs(callbacks) do
+                callback(combat, nonCombat)
+            end
+        end
     elseif opcode == "ROSTER" then
         -- name,class,level,... ; name,class,level,...
         if rosterCallback then

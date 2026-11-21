@@ -238,11 +238,13 @@ BINDING_NAME_PLAYERBOTCONTROL_FLEE = "Flee"
 BINDING_NAME_PLAYERBOTCONTROL_SUMMON = "Summon"
 BINDING_NAME_PLAYERBOTCONTROL_PASSIVE = "Passive / Active"
 BINDING_NAME_PLAYERBOTCONTROL_ATTACK = "Attack my target"
+BINDING_NAME_PLAYERBOTCONTROL_CAREFULPULL = "Careful pull"
+BINDING_NAME_PLAYERBOTCONTROL_PULL = "Pull"
 BINDING_NAME_PLAYERBOTCONTROL_CC = "CC my target"
 
 -- A key does what a left-click on the button does, even while the bar or the
 -- button is hidden.
-function PBC:RunBinding(id)
+function PBC:RunBinding(id, mouseButton)
     local action = self.actionById and self.actionById[id]
     if not action or not self.db then
         return
@@ -252,7 +254,7 @@ function PBC:RunBinding(id)
         self:Print(action.name .. ": " .. self.Bridge:StatusText())
         return
     end
-    action.Click("LeftButton")
+    action.Click(mouseButton or "LeftButton")
 end
 
 -------------------------------------------------------------------------------
