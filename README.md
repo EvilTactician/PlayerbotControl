@@ -1,10 +1,10 @@
-# Playerbot Control 1.1.0
+# Playerbot Control 1.1.1
 
 <div align="center">
 
 ![Interface Version](https://img.shields.io/badge/Interface-30300-blue)
 ![WoW Version](https://img.shields.io/badge/WoW-3.3.5a-orange)
-[![Version](https://img.shields.io/badge/Version-1.1.0-green)](https://github.com/EvilTactician/PlayerbotControl)
+[![Version](https://img.shields.io/badge/Version-1.1.1-green)](https://github.com/EvilTactician/PlayerbotControl)
 [![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
 
 **A World of Warcraft 3.3.5a addon with a small, clean control bar for your
@@ -67,7 +67,7 @@ Groups you leave open stay open. Anything that can't be undone asks first.
 | --- | --- |
 | **Passive / Active** (on the bar) | Passive bots don't fight. Blue glow: passive. Red: active. |
 | **Attack my target** | Your bots attack what you have targeted. It also puts the Skull marker on it, which you can switch off in the options. |
-| **Careful pull** | Your tank pulls the target from range and brings it back to you, with the Skull marker on it. Left-click: careful pull. Everyone waits where they are, damage dealers hold fire (healers can still heal), and once the tank is back near you in combat the group is released to fight. Stand still while it runs: you are the spot they come back to. If the tank isn't back within 20 seconds, the group is released anyway. Right-click: pull. The tank pulls the same way, but nobody waits. Every tank in the group pulls. |
+| **Careful pull** | Your tank pulls the target from range and brings it back to you. Left-click: careful pull. Everyone else waits where they are and holds fire, healers included, until the tank is back near you in combat; then the group fights at your spot. Stand still while it runs: you are the spot they come back to. If the tank isn't back within 20 seconds, the group is released anyway. Right-click: pull. Everyone else holds fire until the tank has pulled, then joins in from where they are. Every tank in the group pulls. The Skull marker only goes on once everyone is held, because Playerbots sends every bot after whatever carries the Skull. |
 | **CC my target** | Puts the Moon marker on your target; bots that can crowd control keep it controlled. Right-click takes the marker off. |
 
 ### Group
@@ -223,7 +223,7 @@ Server settings some buttons depend on, all in `playerbots.conf`:
 | 1.0.0 | Everything above, tested. The first full release. |
 | 1.0.1 | Reset raid lockouts recognises a server that lets players use dot commands but not `.instance unbind`, and falls back to mod-levelsync at once. |
 | 1.0.2 | Quick group checks every invite: it frees a bot stuck in another group (game masters), names it otherwise, and only lists bots it actually invited. |
-| **1.1.0** (now) | Careful pull and Pull, with key bindings. |
+| **1.1.x** (now) | Careful pull and Pull, with key bindings. |
 
 ## Things to know
 

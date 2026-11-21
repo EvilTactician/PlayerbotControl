@@ -1361,14 +1361,16 @@ add({
 --
 -- Playerbots has its own pull: a tank given "pull rti target" pulls the mob
 -- with the Skull marker from range, then runs back to where it stood. Other
--- bots ignore it. Careful pull adds the waiting: everyone stays where they are,
--- damage dealers go passive so nobody opens fire early, and once the tank is
--- back with the mob the group is released to fight.
+-- bots ignore that order, but every bot treats whatever carries the Skull as
+-- an enemy to fight, so the Skull only goes on once the group is held:
+--   1. everyone goes passive (and, for a careful pull, stays where it is)
+--   2. then the Skull goes on, and the tanks go active and pull
+--   3. the group is released: for a careful pull once a tank is back near you
+--      in combat, for a plain pull as soon as a tank is in combat
 -------------------------------------------------------------------------------
 
--- Strategies that make Playerbots count a bot as a tank or a healer.
+-- Strategies that make Playerbots count a bot as a tank.
 local TANK_STRATEGIES = { ["tank assist"] = true, ["tank"] = true, ["bear"] = true, ["blood"] = true }
-local HEAL_STRATEGIES = { ["holy heal"] = true, ["heal"] = true, ["resto"] = true, ["disc"] = true, ["holy"] = true }
 
 local function hasAny(list, wanted)
     for name in pairs(wanted) do
@@ -1379,30 +1381,23 @@ local function hasAny(list, wanted)
     return false
 end
 
--- Sorts the bots in your group into tanks, healers and the rest. Members the
--- bridge doesn't know as bots of yours (players) are left out.
-local function sortGroup(done)
+-- Finds the tanks among the bots in your group. Members the bridge doesn't
+-- know as bots of yours (players) are left out.
+local function findTanks(done)
     local members = otherMembers()
-    local roles = { tanks = {}, healers = {}, others = {} }
-    local left = #members
+    local tanks, left = {}, #members
     if left == 0 then
-        done(roles)
+        done(tanks)
         return
     end
     for _, name in ipairs(members) do
         Bridge:BotStrategies(name, function(combat)
-            if combat then
-                if hasAny(combat, TANK_STRATEGIES) then
-                    roles.tanks[#roles.tanks + 1] = name
-                elseif hasAny(combat, HEAL_STRATEGIES) then
-                    roles.healers[#roles.healers + 1] = name
-                else
-                    roles.others[#roles.others + 1] = name
-                end
+            if combat and hasAny(combat, TANK_STRATEGIES) then
+                tanks[#tanks + 1] = name
             end
             left = left - 1
             if left == 0 then
-                done(roles)
+                done(tanks)
             end
         end)
     end
@@ -1425,93 +1420,75 @@ local function unitFor(name)
     end
 end
 
-local function tellTanksToPull(tanks)
-    for _, tank in ipairs(tanks) do
-        Bridge:BotRti(tank, "pull rti target", function() end)
-    end
-end
-
-local function setPassiveFor(names, on)
-    local change = (on and "+" or "-") .. "passive"
-    for _, name in ipairs(names) do
-        Bridge:BotStrategy(name, "C", change, function() end)
-        Bridge:BotStrategy(name, "N", change, function() end)
-    end
-end
-
 -- How close (CheckInteractDistance 3, about 10 yards) and how long to wait.
 local RELEASE_DISTANCE = 3
-local RELEASE_TIMEOUT = 20
+local CAREFUL_TIMEOUT = 20
+local PULL_TIMEOUT = 10
 
-local function carefulPull(roles, previous)
-    -- Everyone stays where they are; Stay also clears Passive, so Passive
-    -- goes on afterwards: the whole group, then off again for tanks and
-    -- healers. The server takes these in the order they are sent.
-    Bridge:StayOrder(function(ok, reason, matched, succeeded)
-        if not ok then
-            PBC.busy.carefulpull = nil
-            report("Careful pull", ok, reason, matched, succeeded)
+-- Steps 2 and 3, once the group is held.
+local function pullAndRelease(name, tanks, careful, previous)
+    mark(SKULL)
+    -- Sent straight after one another: the server handles each tank's
+    -- "go active" and "pull" before the tank next thinks.
+    for _, tank in ipairs(tanks) do
+        Bridge:BotStrategy(tank, "C", "-passive", function() end)
+        Bridge:BotStrategy(tank, "N", "-passive", function() end)
+        Bridge:BotRti(tank, "pull rti target", function() end)
+    end
+
+    local started = GetTime()
+    local timeout = careful and CAREFUL_TIMEOUT or PULL_TIMEOUT
+    local released = false
+
+    local function release(timedOut)
+        if released then
+            return
+        end
+        released = true
+        PBC.busy.carefulpull = nil
+        if timedOut then
+            PBC:Print(name .. ": the tank " .. (careful and "wasn't back" or "hadn't pulled") .. " after " .. timeout .. " seconds, so the group is released.")
+        end
+        sendPassive(false, function() end)
+        if not careful or previous == "stay" then
             PBC:Refresh()
             return
         end
-        sendPassive(true, function() end)
-        setPassiveFor(roles.tanks, false)
-        setPassiveFor(roles.healers, false)
-        tellTanksToPull(roles.tanks)
+        Bridge:FollowOrder(function(ok, reason, matched, succeeded)
+            if ok then
+                PBC.state.mode = "follow"
+            elseif reason ~= "NO_BOTS" and reason ~= "NO_MATCH" and reason ~= "NO_GROUP" then
+                report("Follow", ok, reason, matched, succeeded)
+            end
+            PBC:Refresh()
+        end)
+    end
 
-        local started = GetTime()
-        local released = false
-
-        local function release(timedOut)
-            if released then
-                return
-            end
-            released = true
-            PBC.busy.carefulpull = nil
-            if timedOut then
-                PBC:Print("Careful pull: the tank wasn't back after " .. RELEASE_TIMEOUT .. " seconds, so the group is released.")
-            end
-            sendPassive(false, function() end)
-            if previous == "stay" then
-                PBC.state.mode = "stay"
-                PBC:Refresh()
-                return
-            end
-            Bridge:FollowOrder(function(ok2, reason2, matched2, succeeded2)
-                if ok2 then
-                    PBC.state.mode = "follow"
-                elseif reason2 ~= "NO_BOTS" and reason2 ~= "NO_MATCH" and reason2 ~= "NO_GROUP" then
-                    report("Follow", ok2, reason2, matched2, succeeded2)
-                end
-                PBC:Refresh()
-            end)
+    -- Checks four times a second, only while a pull runs.
+    local function watch()
+        if released then
+            return
         end
-
-        -- Checks four times a second, only while a careful pull runs.
-        local function watch()
-            if released then
-                return
-            end
-            if not PBC:InGroup() then
+        if not PBC:InGroup() then
+            release(false)
+            return
+        end
+        for _, tank in ipairs(tanks) do
+            local unit = unitFor(tank)
+            if unit and UnitAffectingCombat(unit)
+                and (not careful or CheckInteractDistance(unit, RELEASE_DISTANCE)) then
                 release(false)
                 return
             end
-            for _, tank in ipairs(roles.tanks) do
-                local unit = unitFor(tank)
-                if unit and UnitAffectingCombat(unit) and CheckInteractDistance(unit, RELEASE_DISTANCE) then
-                    release(false)
-                    return
-                end
-            end
-            if GetTime() - started >= RELEASE_TIMEOUT then
-                release(true)
-                return
-            end
-            PBC:After(0.25, watch)
         end
-        -- Give the tank a moment to set off before looking.
-        PBC:After(1, watch)
-    end)
+        if GetTime() - started >= timeout then
+            release(true)
+            return
+        end
+        PBC:After(0.25, watch)
+    end
+    -- Give the tank a moment to set off before looking.
+    PBC:After(1, watch)
 end
 
 local function pullClick(careful)
@@ -1531,27 +1508,52 @@ local function pullClick(careful)
         PBC:Print(name .. ": your bots are passive, and a passive tank won't pull. Set them Active first.")
         return
     end
+    if GetRaidTargetIndex("target") == SKULL then
+        -- Already marked: the bots are on their way in, too late to hold them.
+        PBC:Print(name .. ": your target already has the Skull, so the bots will go for it. Take the Skull off first (or use Attack).")
+        return
+    end
 
-    mark(SKULL)
     local previous = PBC.state.mode
     setBusy("carefulpull", true)
 
-    sortGroup(function(roles)
-        if #roles.tanks == 0 then
+    local function fail(ok, reason, matched, succeeded)
+        PBC.busy.carefulpull = nil
+        report(name, ok, reason, matched, succeeded)
+        PBC:Refresh()
+    end
+
+    findTanks(function(tanks)
+        if #tanks == 0 then
             PBC.busy.carefulpull = nil
             PBC:Print(name .. ": there's no tank among your bots in this group.")
             PBC:Refresh()
             return
         end
         if PBC.db.confirm then
-            PBC:Print(name .. ": " .. table.concat(roles.tanks, ", ") .. " pulling.")
+            PBC:Print(name .. ": " .. table.concat(tanks, ", ") .. " pulling.")
+        end
+
+        -- Step 1: hold everyone. Stay clears Passive, so it goes first.
+        local function hold()
+            sendPassive(true, function(ok, reason, matched, succeeded)
+                if not ok then
+                    fail(ok, reason, matched, succeeded)
+                    return
+                end
+                pullAndRelease(name, tanks, careful, previous)
+            end)
         end
         if careful then
-            carefulPull(roles, previous)
+            Bridge:StayOrder(function(ok, reason, matched, succeeded)
+                if not ok then
+                    fail(ok, reason, matched, succeeded)
+                    return
+                end
+                hold()
+            end)
         else
-            tellTanksToPull(roles.tanks)
-            PBC.busy.carefulpull = nil
-            PBC:Refresh()
+            hold()
         end
     end)
 end
@@ -1567,8 +1569,8 @@ local pullAction = {
     end,
     Tooltip = function(tooltip)
         tooltip:AddLine("Your tank pulls the target from range and brings it back to you. Puts the Skull marker on it.", 1, 1, 1, true)
-        tooltip:AddLine("Left-click: careful pull. Everyone waits where they are, damage dealers hold fire, and the group fights once the tank is back. Stand still while it runs.", 1, 1, 1, true)
-        tooltip:AddLine("Right-click: pull. The tank pulls the same way, but nobody waits.", 1, 1, 1, true)
+        tooltip:AddLine("Left-click: careful pull. Everyone else waits where they are and holds fire until the tank is back with the mob. Stand still while it runs.", 1, 1, 1, true)
+        tooltip:AddLine("Right-click: pull. Everyone else holds fire until the tank has pulled, then joins in from where they are.", 1, 1, 1, true)
     end,
     Click = function(mouseButton)
         pullClick(mouseButton ~= "RightButton")
