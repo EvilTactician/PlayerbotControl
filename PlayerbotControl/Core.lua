@@ -37,6 +37,30 @@ function PBC:Print(msg)
     DEFAULT_CHAT_FRAME:AddMessage("|cff66ccffPlayerbot Control:|r " .. tostring(msg))
 end
 
+-- Tooltip lines that start with a mouse command ("Shift-click:", "Drag:")
+-- get that command in light blue, so the commands stand out.
+local CLICK_COLOR = "|cff66ccff"
+function PBC:ClickLine(text)
+    local command, rest = string.match(text, "^([%a%-]*[Cc]lick):(.*)$")
+    if not command then
+        command, rest = string.match(text, "^(Drag):(.*)$")
+    end
+    if command then
+        return CLICK_COLOR .. command .. ":|r" .. rest
+    end
+    return text
+end
+
+-- A class-coloured name, when the class is known.
+function PBC:ClassName(name, class)
+    local color = class and RAID_CLASS_COLORS and RAID_CLASS_COLORS[class]
+    if color then
+        local function hex(v) return math.floor(v * 255 + 0.5) end
+        return string.format("|cff%02x%02x%02x%s|r", hex(color.r), hex(color.g), hex(color.b), name)
+    end
+    return name
+end
+
 -------------------------------------------------------------------------------
 -- Timers. The frame only runs while a timer is waiting, so it costs nothing
 -- the rest of the time.

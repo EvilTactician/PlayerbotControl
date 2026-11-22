@@ -268,9 +268,26 @@ function Bridge:BotRti(bot, command, callback)
     run(function(token) return "RTI~BOT~" .. encode(bot) .. "~" .. token .. "~" .. encode(command) end, callback)
 end
 
+-- Hands a strategy answer to everyone waiting for that name.
+local function deliverState(key, combat, nonCombat)
+    local callbacks = stateWaiting[key]
+    if callbacks then
+        stateWaiting[key] = nil
+        for _, callback in ipairs(callbacks) do
+            callback(combat, nonCombat)
+        end
+    end
+end
+
+-- Framed answers being collected, by token.
+local stateFrames = {}
+
 -- Asks for one bot's strategy lists. The callback gets (combat, nonCombat)
--- as tables of [strategy name] = true, or nil when the bridge doesn't know
--- the name as a bot of yours or doesn't answer.
+-- as tables of [strategy name] = true (empty for a player or someone else's
+-- bot), or nil when the bridge doesn't answer.
+-- The framed request sends one strategy per message: a bot with many
+-- strategies doesn't fit in the single-message answer, which the bridge then
+-- refuses without saying for whom.
 function Bridge:BotStrategies(bot, callback)
     if self.status ~= "ready" then
         callback(nil)
@@ -283,15 +300,19 @@ function Bridge:BotStrategies(bot, callback)
         return
     end
     stateWaiting[key] = { callback }
-    send("GET", "STATE~" .. bot)
+    local token
+    if self:Supports("STATE_FRAMING_V1") then
+        token = nextToken()
+        stateFrames[token] = { key = key, combat = {}, nonCombat = {} }
+        send("GET", "STATE~" .. encode(bot) .. "~" .. token)
+    else
+        send("GET", "STATE~" .. bot)
+    end
     PBC:After(ACK_TIMEOUT, function()
-        local callbacks = stateWaiting[key]
-        if callbacks then
-            stateWaiting[key] = nil
-            for _, waitingCallback in ipairs(callbacks) do
-                waitingCallback(nil)
-            end
+        if token then
+            stateFrames[token] = nil
         end
+        deliverState(key, nil)
     end)
 end
 
@@ -505,21 +526,42 @@ function Bridge:OnAddonMessage(prefix, message, channel, sender)
         -- name ~ combat strategies ~ non-combat strategies (", " between)
         local fields = split(payload, "~")
         local key = string.lower(fields[1] or "")
-        local callbacks = stateWaiting[key]
-        if callbacks then
-            stateWaiting[key] = nil
+        if stateWaiting[key] then
             -- An empty answer is a real player: no strategies at all.
             local combat, nonCombat = {}, {}
-            do
-                for name in string.gmatch(fields[2] or "", "[^,]+") do
-                    combat[(string.gsub(name, "^%s*(.-)%s*$", "%1"))] = true
-                end
-                for name in string.gmatch(fields[3] or "", "[^,]+") do
-                    nonCombat[(string.gsub(name, "^%s*(.-)%s*$", "%1"))] = true
-                end
+            for name in string.gmatch(fields[2] or "", "[^,]+") do
+                combat[(string.gsub(name, "^%s*(.-)%s*$", "%1"))] = true
             end
-            for _, callback in ipairs(callbacks) do
-                callback(combat, nonCombat)
+            for name in string.gmatch(fields[3] or "", "[^,]+") do
+                nonCombat[(string.gsub(name, "^%s*(.-)%s*$", "%1"))] = true
+            end
+            deliverState(key, combat, nonCombat)
+        end
+    elseif opcode == "STATE_ITEM" then
+        -- token ~ name ~ C|N ~ index ~ strategy
+        local fields = split(payload, "~")
+        local frame = stateFrames[fields[1] or ""]
+        if frame and fields[5] then
+            local list = (fields[3] == "C") and frame.combat or frame.nonCombat
+            list[decode(fields[5])] = true
+        end
+    elseif opcode == "STATE_END" then
+        local token = string.match(payload, "^([^~]*)")
+        local frame = stateFrames[token]
+        if frame then
+            stateFrames[token] = nil
+            deliverState(frame.key, frame.combat, frame.nonCombat)
+        end
+    elseif opcode == "STATE_ABORT" then
+        -- token ~ name ~ reason. NO_BOT: a player, or a bot that isn't yours.
+        local fields = split(payload, "~")
+        local frame = stateFrames[fields[1] or ""]
+        if frame then
+            stateFrames[fields[1]] = nil
+            if decode(fields[3] or "") == "NO_BOT" then
+                deliverState(frame.key, {}, {})
+            else
+                deliverState(frame.key, nil)
             end
         end
     elseif opcode == "ROSTER" then

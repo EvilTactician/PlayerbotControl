@@ -107,7 +107,22 @@ local function showTooltip(button, build)
     else
         GameTooltip:SetOwner(button, "ANCHOR_RIGHT")
     end
-    build(GameTooltip)
+    -- Mouse commands in light blue, except the gold group line on the toggles.
+    local tooltip = setmetatable({
+        AddLine = function(_, text, r, g, b, wrap)
+            if not (r == 1 and g == 0.82 and b == 0) then
+                text = PBC:ClickLine(text)
+            end
+            GameTooltip:AddLine(text, r, g, b, wrap)
+        end,
+    }, { __index = function(_, key)
+        local value = GameTooltip[key]
+        if type(value) == "function" then
+            return function(_, ...) return value(GameTooltip, ...) end
+        end
+        return value
+    end })
+    build(tooltip)
     GameTooltip:Show()
 end
 

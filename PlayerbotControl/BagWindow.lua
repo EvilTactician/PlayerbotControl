@@ -356,12 +356,12 @@ function BagWindow:Use(button)
             entry.done = true
             showItem(button, entry)
             if self.mode == "sell" then
-                -- Once the clicking stops, show the new buyback list.
-                self.buybackDue = (self.buybackDue or 0) + 1
-                local due = self.buybackDue
+                -- Once the clicking stops, read the bags and buyback list again.
+                self.reloadDue = (self.reloadDue or 0) + 1
+                local due = self.reloadDue
                 PBC:After(1, function()
-                    if due == self.buybackDue and self.bot == bot then
-                        self:LoadBuyback()
+                    if due == self.reloadDue and self.bot == bot and self.frame:IsShown() then
+                        self:Load()
                     end
                 end)
             end

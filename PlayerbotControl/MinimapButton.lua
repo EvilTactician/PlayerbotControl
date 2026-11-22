@@ -27,12 +27,12 @@ local function showTooltip(button)
     GameTooltip:SetOwner(button, "ANCHOR_LEFT")
     GameTooltip:AddLine(PBC.title)
     if PBC.db.shown then
-        GameTooltip:AddLine("Left-click: hide the bar", 1, 1, 1)
+        GameTooltip:AddLine(PBC:ClickLine("Left-click: hide the bar"), 1, 1, 1)
     else
-        GameTooltip:AddLine("Left-click: show the bar", 1, 1, 1)
+        GameTooltip:AddLine(PBC:ClickLine("Left-click: show the bar"), 1, 1, 1)
     end
-    GameTooltip:AddLine("Right-click: options", 1, 1, 1)
-    GameTooltip:AddLine("Drag: move this button", 1, 1, 1)
+    GameTooltip:AddLine(PBC:ClickLine("Right-click: options"), 1, 1, 1)
+    GameTooltip:AddLine(PBC:ClickLine("Drag: move this button"), 1, 1, 1)
     GameTooltip:Show()
 end
 

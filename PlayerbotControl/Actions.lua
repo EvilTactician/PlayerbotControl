@@ -1645,9 +1645,11 @@ local function setPuller()
     local target = UnitExists("target") and UnitIsPlayer("target") and UnitName("target")
     if target and groupNames()[string.lower(target)] then
         PBC.chardb.puller = target
-        PBC:Print("Careful pull: " .. target .. " is your puller. Shift-click with no bot targeted to go back to all tanks.")
+        PBC.chardb.pullerClass = select(2, UnitClass("target"))
+        PBC:Print("Careful pull: " .. PBC:ClassName(target, PBC.chardb.pullerClass) .. " is your puller. Shift-click with no bot targeted to go back to all tanks.")
     elseif not UnitExists("target") or UnitCanAttack("player", "target") then
         PBC.chardb.puller = nil
+        PBC.chardb.pullerClass = nil
         PBC:Print("Careful pull: no puller set; every tank in your group pulls.")
     else
         PBC:Print("Careful pull: target one of your bots in your group to make it the puller.")
@@ -1713,7 +1715,7 @@ local pullAction = {
         tooltip:AddLine("Shift-click: make your targeted bot the puller (no bot targeted: every tank pulls).", 1, 1, 1, true)
         local puller = PBC.chardb.puller
         if puller then
-            tooltip:AddLine("Puller: " .. puller .. " (when in your group; it needs to count as a tank for Playerbots)", 0.7, 0.7, 0.7, true)
+            tooltip:AddLine("Puller: " .. PBC:ClassName(puller, PBC.chardb.pullerClass) .. " (when in your group; it needs to count as a tank for Playerbots)", 0.7, 0.7, 0.7, true)
         else
             tooltip:AddLine("Puller: every tank in your group", 0.7, 0.7, 0.7, true)
         end
