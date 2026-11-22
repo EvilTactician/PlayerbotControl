@@ -1,10 +1,10 @@
-# Playerbot Control 1.2.2
+# Playerbot Control 1.2.3
 
 <div align="center">
 
 ![Interface Version](https://img.shields.io/badge/Interface-30300-blue)
 ![WoW Version](https://img.shields.io/badge/WoW-3.3.5a-orange)
-[![Version](https://img.shields.io/badge/Version-1.2.2-green)](https://github.com/EvilTactician/PlayerbotControl)
+[![Version](https://img.shields.io/badge/Version-1.2.3-green)](https://github.com/EvilTactician/PlayerbotControl)
 [![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
 
 **A World of Warcraft 3.3.5a addon with a small, clean control bar for your
@@ -79,7 +79,7 @@ Groups you leave open stay open. Anything that can't be undone asks first.
 | **Drink** | Bots that are short of mana sit down to drink. Not while mounted or in combat. |
 | **Release** | Dead bots release their spirit to the nearest graveyard. Shift-click: bots that released come back to life at the graveyard's spirit healer. |
 | **Roll** | Every bot in your group rolls 1-100. |
-| **Reset** | For bots that are stuck. Left-click: they drop what they're doing and start over. Shift-click: resets their AI to its default strategies, after asking. |
+| **Reset** | For bots that are stuck. Left-click: they drop what they're doing and start over. Shift-click: resets their AI to its default strategies, after asking, then saves them as they are (see [Saving bots](#saving-bots)). |
 
 ### Upkeep
 
@@ -101,8 +101,8 @@ server can't tell them apart from random bots, so you list their names in the op
 | Button | What it does |
 | --- | --- |
 | **Quick group** | Left-click: Quick group 1. Right-click: Quick group 2. Brings in the bots on that list: logs in the ones that are offline (they join you by themselves) and invites the ones that are online, such as parked ones. Turns your party into a raid when a sixth member needs it. If a bot is stuck in another group without you, a game master's Quick group frees it (`.group remove`) and invites it again; otherwise it tells you which bot is stuck. |
-| **Park altbots** | Your listed altbots in the group stay where they are and leave the group, but stay online, for example at an inn. Random bots and players carry on as before. |
-| **Logout altbots** | Left-click: your listed altbots in the group leave it and log out. Parked altbots, random bots and players aren't affected. Right-click: every bot that is yours logs out, in your group or not, parked ones included; random bots aren't yours and stay. Both ask first. |
+| **Park altbots** | Your listed altbots in the group stay where they are and leave the group, but stay online, for example at an inn. Random bots and players carry on as before. Each parked altbot is saved once it's on Stay. |
+| **Logout altbots** | Left-click: your listed altbots in the group leave it and log out. Parked altbots, random bots and players aren't affected. Right-click: every bot that is yours logs out, in your group or not, parked ones included; random bots aren't yours and stay. Both ask first, and save each bot before it logs out. |
 | **Reset raid lockouts** | Removes raid and dungeon lockouts, except for the instance each character is in. This covers normal dungeons too. Left-click: you and every bot in your group. Shift-click: you and everyone in your group, players too. Uses `.instance unbind all` if you're a game master, otherwise `.levelsync unbindall`. Asks first, naming everyone it will reset, and prints one line with the total. |
 
 Park, Logout and inviting need you to be the group leader.
@@ -149,6 +149,19 @@ bags; click an item to sell or trade that stack. **Refresh** reads the bags agai
   ask first. The bot's buyback list is shown along the bottom: click an item there to buy it back.
 - **Trade** needs the bot within trading range. The window closes with the trade; accept the trade
   yourself when you're done.
+
+### Saving bots
+
+Playerbots keeps a bot's settings (strategies, shooting range and the like) in memory and only writes them
+to its database at certain moments, such as a whispered strategy change. Logging a bot out doesn't save
+them, and a reset or leaving the group wipes what was saved, so a bot could come back on its defaults.
+
+So the addon saves bots itself: before **Logout altbots** logs them out, after **Park altbots** puts Stay
+back on, and after **Reset** (Shift-click) resets their AI. The bridge has no plain save, so the addon adds
+the Hearthstone to the bot's always-loot list and takes it off again straight away; any change to that
+list makes Playerbots save the bot. The list ends as it was, and a Hearthstone never drops anyway. This
+needs the bridge's `LOOT_RULE_ITEM_V1`; without it bots simply aren't saved. If a bot can't be saved
+(for example because it's dead), the addon says so in chat.
 
 ### Key bindings
 
@@ -239,7 +252,7 @@ Server settings some buttons depend on, all in `playerbots.conf`:
 | 1.0.1 | Reset raid lockouts recognises a server that lets players use dot commands but not `.instance unbind`, and falls back to mod-levelsync at once. |
 | 1.0.2 | Quick group checks every invite: it frees a bot stuck in another group (game masters), names it otherwise, and only lists bots it actually invited. |
 | 1.1.x | Careful pull and Pull, with key bindings. |
-| **1.2.x** (now) | Faster Careful pull and a chosen puller; Trade and a bag window to sell single items, with buyback; module checks remembered per realm; Logout of every bot; Autogear on Maintenance, Revive on Release; Reset dungeons removed (Reset raid lockouts covers it). |
+| **1.2.x** (now) | Faster Careful pull and a chosen puller; Trade and a bag window to sell single items, with buyback; module checks remembered per realm; Logout of every bot; Autogear on Maintenance, Revive on Release; Reset dungeons removed (Reset raid lockouts covers it); bots saved before logging out and after a park or AI reset (1.2.3). |
 
 ## Things to know
 
@@ -267,8 +280,8 @@ Server settings some buttons depend on, all in `playerbots.conf`:
 - **A puller with a bow or gun walks into melee instead of shooting?** Its shooting range is Playerbots'
   default of 5 yards (whisper it `range ?` to check). Whisper it `range shoot 30`, then `co +pull`.
   Playerbots doesn't save a range by itself; the `co +pull` (a strategy the tank already has) makes it
-  save the bot's settings, so the range survives logging out. A reset, or parking the bot, wipes its saved
-  settings, so do both again after that.
+  save the bot's settings, so the range survives logging out. After that the addon keeps it saved (see
+  [Saving bots](#saving-bots)); after a reset done some other way, whisper `co +pull` again.
 - **CC** relies on Playerbots' default crowd control marker (Moon). If you changed a bot's `rti cc`, mark
   with that one instead.
 - **Raid markers** need leader or assistant in a raid; in a party anyone can set them.
