@@ -264,6 +264,9 @@ Server settings some buttons depend on, all in `playerbots.conf`:
   have by default. Playerbots only lets tanks use it, so a puller must have a tank strategy. Bots set to
   Passive won't pull, so set them Active first. The first pull asks the bridge for each member's strategy
   list to find the tanks, the same way Playerbots does; later pulls go out at once.
+- **A puller with a bow or gun walks into melee instead of shooting?** Its shooting range is Playerbots'
+  default of 5 yards (whisper it `range ?` to check). Whisper it `range shoot 30` once. The bot keeps this
+  until its AI is reset, which also happens when you park it, so whisper it again after that.
 - **CC** relies on Playerbots' default crowd control marker (Moon). If you changed a bot's `rti cc`, mark
   with that one instead.
 - **Raid markers** need leader or assistant in a raid; in a party anyone can set them.
