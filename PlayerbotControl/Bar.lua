@@ -27,7 +27,12 @@ local buttons = {}  -- [action id] = button
 -- server module it belongs to didn't answer, or when the server has said it
 -- doesn't support what the button needs.
 local function isShown(action)
-    if PBC.db.hidden[action.id] then
+    -- A button with its own setting (Separate Autogear) shows by that alone.
+    if action.setting then
+        if not PBC.db[action.setting] then
+            return false
+        end
+    elseif PBC.db.hidden[action.id] then
         return false
     end
     if action.module and PBC.modules[action.module] ~= true then

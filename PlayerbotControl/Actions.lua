@@ -25,7 +25,7 @@ local MOON = 5
 PBC.groups = {
     { id = "movement", name = "Movement", icon = ICONS .. "Ability_Rogue_FleetFooted",   primary = "followstay" },
     { id = "combat",   name = "Combat",   icon = ICONS .. "Ability_Warrior_BattleShout", primary = "passive" },
-    { id = "group",    name = "Group",    icon = ICONS .. "INV_Misc_GroupLooking" },
+    { id = "group",    name = "Group Actions", icon = ICONS .. "INV_Misc_GroupLooking" },
     { id = "upkeep",   name = "Upkeep",   icon = ICONS .. "Trade_BlackSmithing" },
     { id = "party",    name = "Party",    icon = ICONS .. "Spell_Holy_PrayerofSpirit" },
 }
@@ -596,27 +596,18 @@ add({
         return ICONS .. "INV_Misc_Bone_HumanSkull_01"
     end,
     Tooltip = function(tooltip)
-        tooltip:AddLine("Dead bots release their spirit to the nearest graveyard.", 1, 1, 1, true)
+        tooltip:AddLine("Left-click: dead bots release their spirit to the nearest graveyard.", 1, 1, 1, true)
+        tooltip:AddLine("Shift-click: revive. Bots that released come back to life at the spirit healer.", 1, 1, 1, true)
     end,
-    Click = function()
-        groupOrder("release", "Release", function(done) Bridge:GroupAction("RELEASE", done) end)
-    end,
-})
-
-add({
-    id = "revive",
-    group = "group",
-    name = "Revive",
-    caps = { "GROUP_ACTION_V1" },
-    bridge = true,
-    Visual = function()
-        return ICONS .. "Spell_Holy_Resurrection"
-    end,
-    Tooltip = function(tooltip)
-        tooltip:AddLine("Bots that released come back to life at the graveyard's spirit healer.", 1, 1, 1, true)
-    end,
-    Click = function()
-        groupOrder("revive", "Revive", function(done) Bridge:GroupAction("REVIVE", done) end)
+    Click = function(mouseButton)
+        if mouseButton ~= "LeftButton" then
+            return
+        end
+        if IsShiftKeyDown() then
+            groupOrder("release", "Revive", function(done) Bridge:GroupAction("REVIVE", done) end)
+        else
+            groupOrder("release", "Release", function(done) Bridge:GroupAction("RELEASE", done) end)
+        end
     end,
 })
 
@@ -678,6 +669,26 @@ add({
 -- Upkeep
 -------------------------------------------------------------------------------
 
+local function autogearAll()
+    if PBC.busy.autogear or not needGroup("Autogear") then
+        return
+    end
+    PBC:Confirm("Autogear every bot in your group?\n\nEach bot gets new gear for its level from the server's item pool, within the server's quality and item level limits. It replaces what they are wearing and can't be undone.",
+        "Autogear",
+        function()
+            batch("autogear", "Autogear", 0.2, nil,
+                { DISABLED = "the server has autogear switched off (AiPlayerbot.AutoGearCommand)" },
+                function(bot, done)
+                    Bridge:Autogear(bot, done)
+                end,
+                function(result)
+                    if result.bots > 0 then
+                        PBC:Print("Autogear: " .. plural(result.bots, "bot") .. ", " .. plural(result.total, "slot") .. " changed.")
+                    end
+                end)
+        end)
+end
+
 add({
     id = "maintenance",
     group = "upkeep",
@@ -688,10 +699,22 @@ add({
         return ICONS .. "Ability_Repair"
     end,
     Tooltip = function(tooltip)
-        tooltip:AddLine("Playerbots' maintenance for every bot in your group: repairs, reagents, food, ammo, spells and the like.", 1, 1, 1, true)
+        tooltip:AddLine("Left-click: Playerbots' maintenance for every bot in your group: repairs, reagents, food, ammo, spells and the like.", 1, 1, 1, true)
+        if not PBC.db.separateAutogear then
+            tooltip:AddLine("Shift-click: autogear. Every bot in your group gets new gear for its level from the server's item pool, replacing what it wears. Asks first.", 1, 1, 1, true)
+        end
         tooltip:AddLine("The server allows a few bots at a time, so a full group takes a little while. The number on the button counts down.", 0.7, 0.7, 0.7, true)
     end,
-    Click = function()
+    Click = function(mouseButton)
+        if mouseButton ~= "LeftButton" then
+            return
+        end
+        if IsShiftKeyDown() then
+            if not PBC.db.separateAutogear then
+                autogearAll()
+            end
+            return
+        end
         -- The bridge takes four of these per ten seconds.
         batch("maintenance", "Maintenance", 2.6, nil,
             { DISABLED = "the server has the maintenance command switched off (AiPlayerbot.MaintenanceCommand)" },
@@ -706,10 +729,15 @@ add({
     end,
 })
 
+-- Only shown with "Separate Autogear button" on; otherwise it is Shift-click
+-- on Maintenance.
 add({
     id = "autogear",
     group = "upkeep",
     name = "Autogear",
+    setting = "separateAutogear",
+    optionLabel = "Separate Autogear button",
+    optionTip = "Autogear as its own button. Off: it's Shift-click on Maintenance instead.",
     caps = { "AUTOGEAR_OPTIONS_V1" },
     bridge = true,
     Visual = function()
@@ -720,23 +748,7 @@ add({
         tooltip:AddLine("Replaces what they wear. Asks first.", 1, 0.6, 0, true)
     end,
     Click = function()
-        if PBC.busy.autogear or not needGroup("Autogear") then
-            return
-        end
-        PBC:Confirm("Autogear every bot in your group?\n\nEach bot gets new gear for its level from the server's item pool, within the server's quality and item level limits. It replaces what they are wearing and can't be undone.",
-            "Autogear",
-            function()
-                batch("autogear", "Autogear", 0.2, nil,
-                    { DISABLED = "the server has autogear switched off (AiPlayerbot.AutoGearCommand)" },
-                    function(bot, done)
-                        Bridge:Autogear(bot, done)
-                    end,
-                    function(result)
-                        if result.bots > 0 then
-                            PBC:Print("Autogear: " .. plural(result.bots, "bot") .. ", " .. plural(result.total, "slot") .. " changed.")
-                        end
-                    end)
-            end)
+        autogearAll()
     end,
 })
 
@@ -770,8 +782,13 @@ add({
         tooltip:AddLine("Each bot sells to a vendor it is standing next to.", 1, 1, 1, true)
         tooltip:AddLine("Left-click: grey items only", 1, 1, 1)
         tooltip:AddLine("Shift-click: everything they count as vendor trash, after equipping upgrades from their bags (asks first)", 1, 1, 1, true)
+        tooltip:AddLine("Right-click: open your targeted bot's bags and pick what it sells, with buyback", 1, 1, 1, true)
     end,
     Click = function(mouseButton)
+        if mouseButton == "RightButton" then
+            PBC.BagWindow:OpenFor("sell")
+            return
+        end
         if mouseButton ~= "LeftButton" or PBC.busy.sell or not needGroup("Sell") then
             return
         end
@@ -797,6 +814,24 @@ add({
 })
 
 add({
+    id = "trade",
+    group = "upkeep",
+    name = "Trade",
+    caps = { "INVENTORY_EXACT_V1", "ITEM_TRADE_V1" },
+    bridge = true,
+    Visual = function()
+        return ICONS .. "INV_Misc_Bag_10"
+    end,
+    Tooltip = function(tooltip)
+        tooltip:AddLine("Opens a trade with your targeted bot and shows its bags. Click an item and the bot puts it in the trade window; accept as usual.", 1, 1, 1, true)
+        tooltip:AddLine("The bot has to be close enough to trade with.", 0.7, 0.7, 0.7, true)
+    end,
+    Click = function()
+        PBC.BagWindow:OpenFor("trade")
+    end,
+})
+
+add({
     id = "levelsync",
     group = "upkeep",
     name = "Level sync",
@@ -808,7 +843,7 @@ add({
         tooltip:AddLine("Runs mod-levelsync's level sync for your sync group (.levelsync level on).", 1, 1, 1, true)
     end,
     Click = function()
-        PBC:Command(".levelsync level on")
+        PBC:ModuleCommand("levelsync", "Level sync", ".levelsync level on")
     end,
 })
 
@@ -830,13 +865,13 @@ add({
             return
         end
         if not IsShiftKeyDown() then
-            PBC:Command(".tokenturnin check")
+            PBC:ModuleCommand("tokenturnin", "Raid tokens", ".tokenturnin check")
             return
         end
         PBC:Confirm("Redeem raid tokens?\n\nEvery token the check lists is turned into its item for that character. This can't be undone. Left-click the button first to see what would happen.",
             "Redeem",
             function()
-                PBC:Command(".tokenturnin redeem")
+                PBC:ModuleCommand("tokenturnin", "Raid tokens", ".tokenturnin redeem")
             end)
     end,
 })
@@ -1220,6 +1255,86 @@ add({
     end,
 })
 
+-- Right-click on Logout altbots: every bot of yours that is online. The
+-- bridge lists the bots you can see (yours, and random bots in your group);
+-- each is looked up, and only those logged in under your control are logged
+-- out. Random bots come back as "not allowed" and are skipped quietly.
+local function logoutEveryBot()
+    if not Bridge:IsReady() then
+        report("Logout altbots", false, Bridge.status == "connecting" and "CONNECTING" or "NO_BRIDGE")
+        Bridge:Hello()
+        return
+    end
+    setBusy("logout", true)
+    Bridge:Roster(function(bots)
+        local names = {}
+        local me = string.lower(UnitName("player") or "")
+        for key, botName in pairs(bots or {}) do
+            if key ~= me then
+                names[#names + 1] = botName
+            end
+        end
+        if #names == 0 then
+            PBC.busy.logout = nil
+            PBC:Print("Logout altbots: you have no bots online.")
+            PBC:Refresh()
+            return
+        end
+
+        local online, left = {}, #names
+        for _, key in ipairs(names) do
+            Bridge:Resolve(key, function(ok, reason, guid, state, name)
+                if ok and state == "ONLINE" then
+                    online[#online + 1] = { name = (name ~= "" and name) or key, guid = guid }
+                end
+                left = left - 1
+                if left > 0 then
+                    return
+                end
+                PBC.busy.logout = nil
+                PBC:Refresh()
+                if #online == 0 then
+                    PBC:Print("Logout altbots: you have no bots of your own online.")
+                    return
+                end
+                table.sort(online, function(a, b) return a.name < b.name end)
+                local list = {}
+                for _, bot in ipairs(online) do
+                    list[#list + 1] = bot.name
+                end
+                PBC:Confirm("Log out all your bots?\n\n" .. table.concat(list, ", ") .. " will log out, wherever they are. Bots in your group leave it first.",
+                    "Log out",
+                    function()
+                        local inGroup = groupNames()
+                        runBatch("logout", "Logout altbots", 0.1, { BOT_NOT_ONLINE = true }, {
+                                FORBIDDEN        = "only the group leader can remove them from your group",
+                                TARGET_IS_LEADER = "is the group leader, so can't be removed",
+                            },
+                            function(botName, done)
+                                for _, bot in ipairs(online) do
+                                    if bot.name == botName then
+                                        if inGroup[string.lower(botName)] then
+                                            Bridge:LogoutFromGroup(bot.guid, done)
+                                        else
+                                            Bridge:Logout(bot.guid, done)
+                                        end
+                                        return
+                                    end
+                                end
+                                done(false, "NO_BOT")
+                            end,
+                            function(result)
+                                if result.bots > 0 then
+                                    PBC:Print("Logout altbots: " .. plural(result.bots, "bot") .. " logged out.")
+                                end
+                            end,
+                            list)
+                    end)
+            end)
+        end
+    end)
+end
+
 add({
     id = "logout",
     group = "party",
@@ -1230,11 +1345,16 @@ add({
         return ICONS .. "Ability_Vanish"
     end,
     Tooltip = function(tooltip)
-        tooltip:AddLine("Your altbots in this group leave the group and log out. Asks first.", 1, 1, 1, true)
-        tooltip:AddLine("Random bots, players and parked altbots aren't affected.", 0.7, 0.7, 0.7, true)
+        tooltip:AddLine("Left-click: your listed altbots in this group leave the group and log out. Random bots, players and parked altbots aren't affected.", 1, 1, 1, true)
+        tooltip:AddLine("Right-click: log out every bot of yours that is online, wherever it is: grouped, parked or stuck. Random bots aren't affected.", 1, 1, 1, true)
+        tooltip:AddLine("Both ask first.", 0.7, 0.7, 0.7, true)
     end,
-    Click = function()
+    Click = function(mouseButton)
         if PBC.busy.logout then
+            return
+        end
+        if mouseButton == "RightButton" then
+            logoutEveryBot()
             return
         end
         if #PBC.chardb.altbots == 0 then
@@ -1282,26 +1402,6 @@ add({
 })
 
 add({
-    id = "resetdungeons",
-    group = "party",
-    name = "Reset dungeons",
-    Visual = function()
-        return ICONS .. "INV_Misc_Key_03"
-    end,
-    Tooltip = function(tooltip)
-        tooltip:AddLine("Resets your normal dungeons, as the game's own Reset all instances does.", 1, 1, 1, true)
-        tooltip:AddLine("You need to be the group leader, and nobody may still be inside.", 0.7, 0.7, 0.7, true)
-    end,
-    Click = function()
-        if not isLeader() then
-            PBC:Print("Reset dungeons: only the group leader can reset dungeons.")
-            return
-        end
-        ResetInstances()
-    end,
-})
-
-add({
     id = "resetraids",
     group = "party",
     name = "Reset raid lockouts",
@@ -1311,14 +1411,17 @@ add({
     Tooltip = function(tooltip)
         tooltip:AddLine("Removes raid and dungeon lockouts, except for the instance each of you is in. Asks first.", 1, 1, 1, true)
         tooltip:AddLine("Left-click: you and every bot in your group", 1, 1, 1)
-        tooltip:AddLine("Right-click: you and everyone in your group, players too", 1, 1, 1)
+        tooltip:AddLine("Shift-click: you and everyone in your group, players too", 1, 1, 1)
         tooltip:AddLine("Needs game master rights, or mod-levelsync with LevelSync.AllowRaidUnbind = 1.", 0.7, 0.7, 0.7, true)
     end,
     Click = function(mouseButton)
         if PBC.resettingLockouts then
             return
         end
-        local everyone = (mouseButton == "RightButton")
+        if mouseButton ~= "LeftButton" then
+            return
+        end
+        local everyone = IsShiftKeyDown()
 
         local function ask(others, note)
             local who = "you"
@@ -1342,7 +1445,7 @@ add({
         -- Which of the others are bots? The bridge knows.
         Bridge:Roster(function(bots)
             if not bots then
-                ask({}, "\n\nThe bridge didn't say which of your group are bots, so only you. Right-click to include everyone.")
+                ask({}, "\n\nThe bridge didn't say which of your group are bots, so only you. Shift-click to include everyone.")
                 return
             end
             local others = {}
@@ -1372,6 +1475,9 @@ add({
 -- Strategies that make Playerbots count a bot as a tank.
 local TANK_STRATEGIES = { ["tank assist"] = true, ["tank"] = true, ["bear"] = true, ["blood"] = true }
 
+-- [lower-case name] = true or false, learnt once per session per bot.
+local tankCache = {}
+
 local function hasAny(list, wanted)
     for name in pairs(wanted) do
         if list[name] then
@@ -1381,23 +1487,48 @@ local function hasAny(list, wanted)
     return false
 end
 
--- Finds the tanks among the bots in your group. Members the bridge doesn't
--- know as bots of yours (players) are left out.
+-- Your puller if one is set and in your group, else the tanks among your
+-- bots. Bots already known are answered at once; only new ones are asked.
 local function findTanks(done)
-    local members = otherMembers()
-    local tanks, left = {}, #members
-    if left == 0 then
-        done(tanks)
+    local inGroup = groupNames()
+    local puller = PBC.chardb.puller
+    if puller and inGroup[string.lower(puller)] then
+        done({ inGroup[string.lower(puller)] })
         return
     end
+
+    local members = otherMembers()
+    local unknown = {}
     for _, name in ipairs(members) do
-        Bridge:BotStrategies(name, function(combat)
-            if combat and hasAny(combat, TANK_STRATEGIES) then
+        if tankCache[string.lower(name)] == nil then
+            unknown[#unknown + 1] = name
+        end
+    end
+
+    local function finish()
+        local tanks = {}
+        for _, name in ipairs(members) do
+            if tankCache[string.lower(name)] then
                 tanks[#tanks + 1] = name
+            end
+        end
+        done(tanks)
+    end
+
+    if #unknown == 0 then
+        finish()
+        return
+    end
+    local left = #unknown
+    for _, name in ipairs(unknown) do
+        Bridge:BotStrategies(name, function(combat)
+            -- Bots that don't answer aren't remembered; players are (no strategies).
+            if combat then
+                tankCache[string.lower(name)] = hasAny(combat, TANK_STRATEGIES)
             end
             left = left - 1
             if left == 0 then
-                done(tanks)
+                finish()
             end
         end)
     end
@@ -1425,17 +1556,7 @@ local RELEASE_DISTANCE = 3
 local CAREFUL_TIMEOUT = 20
 local PULL_TIMEOUT = 10
 
--- Steps 2 and 3, once the group is held.
-local function pullAndRelease(name, tanks, careful, previous)
-    mark(SKULL)
-    -- Sent straight after one another: the server handles each tank's
-    -- "go active" and "pull" before the tank next thinks.
-    for _, tank in ipairs(tanks) do
-        Bridge:BotStrategy(tank, "C", "-passive", function() end)
-        Bridge:BotStrategy(tank, "N", "-passive", function() end)
-        Bridge:BotRti(tank, "pull rti target", function() end)
-    end
-
+local function watchAndRelease(name, tanks, careful, previous)
     local started = GetTime()
     local timeout = careful and CAREFUL_TIMEOUT or PULL_TIMEOUT
     local released = false
@@ -1491,6 +1612,48 @@ local function pullAndRelease(name, tanks, careful, previous)
     PBC:After(1, watch)
 end
 
+-- Everything goes out at once, in this order; the server handles it in
+-- that order before any bot next thinks:
+--   1. careful only: everyone Stays (Stay also clears Passive, so it's first)
+--   2. everyone goes Passive, so nobody goes for the Skull
+--   3. the Skull goes on
+--   4. the tanks drop Stay (a bot on Stay won't move to pull) and Passive,
+--      and are told to pull
+local function startPull(name, tanks, careful)
+    local previous = PBC.state.mode
+    local function failed(ok, reason, matched, succeeded)
+        if not ok then
+            report(name, ok, reason, matched, succeeded)
+        end
+    end
+    if careful then
+        Bridge:StayOrder(failed)
+    end
+    sendPassive(true, failed)
+    mark(SKULL)
+    local change = careful and "-stay,-passive" or "-passive"
+    for _, tank in ipairs(tanks) do
+        Bridge:BotStrategy(tank, "C", change, function() end)
+        Bridge:BotStrategy(tank, "N", change, function() end)
+        Bridge:BotRti(tank, "pull rti target", function() end)
+    end
+    watchAndRelease(name, tanks, careful, previous)
+end
+
+-- Shift-click: your targeted bot becomes the puller; no bot targeted clears it.
+local function setPuller()
+    local target = UnitExists("target") and UnitIsPlayer("target") and UnitName("target")
+    if target and groupNames()[string.lower(target)] then
+        PBC.chardb.puller = target
+        PBC:Print("Careful pull: " .. target .. " is your puller. Shift-click with no bot targeted to go back to all tanks.")
+    elseif not UnitExists("target") or UnitCanAttack("player", "target") then
+        PBC.chardb.puller = nil
+        PBC:Print("Careful pull: no puller set; every tank in your group pulls.")
+    else
+        PBC:Print("Careful pull: target one of your bots in your group to make it the puller.")
+    end
+end
+
 local function pullClick(careful)
     local name = careful and "Careful pull" or "Pull"
     if PBC.busy.carefulpull or not needGroup(name) then
@@ -1508,21 +1671,18 @@ local function pullClick(careful)
         PBC:Print(name .. ": your bots are passive, and a passive tank won't pull. Set them Active first.")
         return
     end
+    if not Bridge:IsReady() then
+        report(name, false, Bridge.status == "connecting" and "CONNECTING" or "NO_BRIDGE")
+        Bridge:Hello()
+        return
+    end
     if GetRaidTargetIndex("target") == SKULL then
         -- Already marked: the bots are on their way in, too late to hold them.
         PBC:Print(name .. ": your target already has the Skull, so the bots will go for it. Take the Skull off first (or use Attack).")
         return
     end
 
-    local previous = PBC.state.mode
     setBusy("carefulpull", true)
-
-    local function fail(ok, reason, matched, succeeded)
-        PBC.busy.carefulpull = nil
-        report(name, ok, reason, matched, succeeded)
-        PBC:Refresh()
-    end
-
     findTanks(function(tanks)
         if #tanks == 0 then
             PBC.busy.carefulpull = nil
@@ -1533,28 +1693,7 @@ local function pullClick(careful)
         if PBC.db.confirm then
             PBC:Print(name .. ": " .. table.concat(tanks, ", ") .. " pulling.")
         end
-
-        -- Step 1: hold everyone. Stay clears Passive, so it goes first.
-        local function hold()
-            sendPassive(true, function(ok, reason, matched, succeeded)
-                if not ok then
-                    fail(ok, reason, matched, succeeded)
-                    return
-                end
-                pullAndRelease(name, tanks, careful, previous)
-            end)
-        end
-        if careful then
-            Bridge:StayOrder(function(ok, reason, matched, succeeded)
-                if not ok then
-                    fail(ok, reason, matched, succeeded)
-                    return
-                end
-                hold()
-            end)
-        else
-            hold()
-        end
+        startPull(name, tanks, careful)
     end)
 end
 
@@ -1571,8 +1710,19 @@ local pullAction = {
         tooltip:AddLine("Your tank pulls the target from range and brings it back to you. Puts the Skull marker on it.", 1, 1, 1, true)
         tooltip:AddLine("Left-click: careful pull. Everyone else waits where they are and holds fire until the tank is back with the mob. Stand still while it runs.", 1, 1, 1, true)
         tooltip:AddLine("Right-click: pull. Everyone else holds fire until the tank has pulled, then joins in from where they are.", 1, 1, 1, true)
+        tooltip:AddLine("Shift-click: make your targeted bot the puller (no bot targeted: every tank pulls).", 1, 1, 1, true)
+        local puller = PBC.chardb.puller
+        if puller then
+            tooltip:AddLine("Puller: " .. puller .. " (when in your group; it needs to count as a tank for Playerbots)", 0.7, 0.7, 0.7, true)
+        else
+            tooltip:AddLine("Puller: every tank in your group", 0.7, 0.7, 0.7, true)
+        end
     end,
     Click = function(mouseButton)
+        if mouseButton == "LeftButton" and IsShiftKeyDown() then
+            setPuller()
+            return
+        end
         pullClick(mouseButton ~= "RightButton")
     end,
 }

@@ -20,7 +20,9 @@ local defaults = {
     skull = true,       -- Attack also puts the Skull marker on the target
     confirm = false,    -- print a line in chat when an order succeeds
     open = { movement = false, combat = false, group = false, upkeep = false, party = false },
+    knownModules = {},  -- [realm] = { [module] = true } found by the module check
     hidden = {},        -- [action id] = true for buttons switched off
+    separateAutogear = false, -- Autogear as its own button, not Shift-click on Maintenance
     minimap = { show = true, angle = 200 },
 }
 
@@ -178,6 +180,7 @@ end
 local events = CreateFrame("Frame")
 local enteredWorld = false
 local rosterReady = false
+local wasGrouped = false
 
 events:RegisterEvent("ADDON_LOADED")
 events:RegisterEvent("PLAYER_LOGIN")
@@ -191,16 +194,22 @@ events:SetScript("OnEvent", function(self, event, ...)
     if event == "CHAT_MSG_ADDON" then
         PBC.Bridge:OnAddonMessage(...)
     elseif event == "PARTY_MEMBERS_CHANGED" or event == "RAID_ROSTER_UPDATE" then
-        -- Out of the group: nothing is known about any bots any more.
-        if rosterReady and not PBC:InGroup() then
+        local grouped = PBC:InGroup()
+        if rosterReady and not grouped then
+            -- Out of the group: nothing is known about any bots any more.
             PBC:ResetState()
+        elseif rosterReady and grouped and not wasGrouped then
+            -- Just joined a group: check again for modules not found yet.
+            PBC:ProbeModules(true)
         end
+        wasGrouped = grouped
     elseif event == "ADDON_LOADED" then
         if ... == PBC.name then
             loadSettings()
             self:UnregisterEvent("ADDON_LOADED")
         end
     elseif event == "PLAYER_LOGIN" then
+        PBC:LoadKnownModules()
         PBC.Bar:Create()
         PBC.MinimapButton:Create()
         PBC.Options:Create()
@@ -216,7 +225,8 @@ events:SetScript("OnEvent", function(self, event, ...)
             -- The group isn't known for the first moments after loading.
             PBC:After(5, function()
                 rosterReady = true
-                if not PBC:InGroup() then
+                wasGrouped = PBC:InGroup()
+                if not wasGrouped then
                     PBC:ResetState()
                 end
             end)
@@ -288,7 +298,7 @@ SlashCmdList["PLAYERBOTCONTROL"] = function(input)
         PBC:Refresh()
         PBC:Print("Bar moved back to the middle of the screen at normal size.")
     elseif cmd == "status" then
-        PBC:Print("Version " .. PBC.version .. ". " .. PBC.Bridge:StatusText())
+        PBC:Print("Version " .. PBC.version .. ". " .. PBC.Bridge:StatusText() .. " Modules: " .. PBC:ModuleStatusText() .. ".")
     elseif cmd == "" or cmd == "options" or cmd == "config" then
         PBC.Options:Open()
     else

@@ -1,10 +1,10 @@
-# Playerbot Control 1.1.1
+# Playerbot Control 1.2.0
 
 <div align="center">
 
 ![Interface Version](https://img.shields.io/badge/Interface-30300-blue)
 ![WoW Version](https://img.shields.io/badge/WoW-3.3.5a-orange)
-[![Version](https://img.shields.io/badge/Version-1.1.1-green)](https://github.com/EvilTactician/PlayerbotControl)
+[![Version](https://img.shields.io/badge/Version-1.2.0-green)](https://github.com/EvilTactician/PlayerbotControl)
 [![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
 
 **A World of Warcraft 3.3.5a addon with a small, clean control bar for your
@@ -20,8 +20,10 @@ is whispered.
 - **Follow or Stay** and **Passive or Active** are single buttons that show the current mode, with a
   coloured glow so you can tell at a glance.
 - **Attack** and **CC** work on whatever you have targeted, in a party or a raid.
-- **Group** and **Upkeep** hold the less frequent orders: drink, release, revive, roll, reset, maintenance,
-  autogear, sell, level sync and raid tokens.
+- **Careful pull** has your tank pull the target back to you while everyone else waits.
+- **Group Actions** and **Upkeep** hold the less frequent orders: drink, release, revive, roll, reset,
+  maintenance, autogear, sell, trade, level sync and raid tokens. A bot's bags can be opened to sell or
+  trade single items.
 - **Party** looks after your altbots: bring a few in with one click, park them at an inn, or log them out,
   without touching random bots or other players.
 - The bar can be moved anywhere, resized, hidden from a minimap button, and every button can be switched
@@ -48,7 +50,7 @@ The bar has one button per group.
 - **Movement** and **Combat** show their toggle on the bar. **Left-click** uses it, **Shift-click** repeats
   its current order for bots that just joined, and **right-click** shows or hides the group's other
   buttons above it.
-- **Group**, **Upkeep** and **Party** have a plain group button. Click it to show or hide the group's
+- **Group Actions**, **Upkeep** and **Party** have a plain group button. Click it to show or hide the group's
   buttons.
 
 Groups you leave open stay open. Anything that can't be undone asks first.
@@ -67,16 +69,15 @@ Groups you leave open stay open. Anything that can't be undone asks first.
 | --- | --- |
 | **Passive / Active** (on the bar) | Passive bots don't fight. Blue glow: passive. Red: active. |
 | **Attack my target** | Your bots attack what you have targeted. It also puts the Skull marker on it, which you can switch off in the options. |
-| **Careful pull** | Your tank pulls the target from range and brings it back to you. Left-click: careful pull. Everyone else waits where they are and holds fire, healers included, until the tank is back near you in combat; then the group fights at your spot. Stand still while it runs: you are the spot they come back to. If the tank isn't back within 20 seconds, the group is released anyway. Right-click: pull. Everyone else holds fire until the tank has pulled, then joins in from where they are. Every tank in the group pulls. The Skull marker only goes on once everyone is held, because Playerbots sends every bot after whatever carries the Skull. |
+| **Careful pull** | Your tank pulls the target from range and brings it back to you. Left-click: careful pull. Everyone else stays where they are and holds fire, healers included, until the tank is back near you in combat; then the group fights at your spot. Stand still while it runs: you are the spot they come back to. If the tank isn't back within 20 seconds, the group is released anyway. Right-click: pull. Everyone else holds fire until the tank is in combat, then joins in from where they are. Shift-click with one of your bots targeted: that bot is your puller from now on, instead of every tank in the group. Shift-click with no bot targeted goes back to all tanks. The orders go out together, held first and Skull last, because Playerbots sends every bot after whatever carries the Skull. A target that already has the Skull isn't pulled. |
 | **CC my target** | Puts the Moon marker on your target; bots that can crowd control keep it controlled. Right-click takes the marker off. |
 
-### Group
+### Group Actions
 
 | Button | What it does |
 | --- | --- |
 | **Drink** | Bots that are short of mana sit down to drink. Not while mounted or in combat. |
-| **Release** | Dead bots release their spirit to the nearest graveyard. |
-| **Revive** | Bots that released come back to life at the graveyard's spirit healer. |
+| **Release** | Dead bots release their spirit to the nearest graveyard. Shift-click: bots that released come back to life at the graveyard's spirit healer. |
 | **Roll** | Every bot in your group rolls 1-100. |
 | **Reset** | For bots that are stuck. Left-click: they drop what they're doing and start over. Shift-click: resets their AI to its default strategies, after asking. |
 
@@ -84,9 +85,10 @@ Groups you leave open stay open. Anything that can't be undone asks first.
 
 | Button | What it does |
 | --- | --- |
-| **Maintenance** | Playerbots' maintenance for every bot in your group: repairs, reagents, food, ammo, spells and the like. The server allows four bots per ten seconds, so the number on the button counts down. |
-| **Autogear** | Gives every bot in your group new gear for its level from the server's item pool, within the server's limits. Replaces what they wear, so it asks first. |
-| **Sell** | Each bot sells to a vendor it is standing next to. Left-click: grey items only. Shift-click: everything the bots count as vendor trash, after they equip upgrades from their bags; asks first. |
+| **Maintenance** | Playerbots' maintenance for every bot in your group: repairs, reagents, food, ammo, spells and the like. The server allows four bots per ten seconds, so the number on the button counts down. Shift-click: Autogear. |
+| **Autogear** | Gives every bot in your group new gear for its level from the server's item pool, within the server's limits. Replaces what they wear, so it asks first. It's Shift-click on Maintenance; tick **Separate Autogear button** on the Buttons page to have it as its own button instead. |
+| **Sell** | Each bot sells to a vendor it is standing next to. Left-click: grey items only. Shift-click: everything the bots count as vendor trash, after they equip upgrades from their bags; asks first. Right-click: opens the bags of the bot you have targeted, to sell items one by one (see [Bag window](#bag-window)). |
+| **Trade** | Opens a trade with the bot you have targeted and shows its bags. Click an item and the bot puts it in the trade window. |
 | **Level sync** | Runs mod-levelsync's level sync (`.levelsync level on`). Only shown when the server has the module. |
 | **Raid tokens** | mod-token-turnin. Left-click: check what would be redeemed, changing nothing. Shift-click: redeem, after asking. Only shown when the server has the module. |
 
@@ -100,9 +102,8 @@ server can't tell them apart from random bots, so you list their names in the op
 | --- | --- |
 | **Quick group** | Left-click: Quick group 1. Right-click: Quick group 2. Brings in the bots on that list: logs in the ones that are offline (they join you by themselves) and invites the ones that are online, such as parked ones. Turns your party into a raid when a sixth member needs it. If a bot is stuck in another group without you, a game master's Quick group frees it (`.group remove`) and invites it again; otherwise it tells you which bot is stuck. |
 | **Park altbots** | Your listed altbots in the group stay where they are and leave the group, but stay online, for example at an inn. Random bots and players carry on as before. |
-| **Logout altbots** | Your listed altbots in the group leave it and log out. Asks first. Parked altbots, random bots and players aren't affected. |
-| **Reset dungeons** | The game's own reset of your normal dungeons. You need to be the group leader. |
-| **Reset raid lockouts** | Removes raid and dungeon lockouts, except for the instance each character is in. Left-click: you and every bot in your group. Right-click: you and everyone in your group, players too. Uses `.instance unbind all` if you're a game master, otherwise `.levelsync unbindall`. Asks first, naming everyone it will reset, and prints one line with the total. |
+| **Logout altbots** | Left-click: your listed altbots in the group leave it and log out. Parked altbots, random bots and players aren't affected. Right-click: every bot that is yours logs out, in your group or not, parked ones included; random bots aren't yours and stay. Both ask first. |
+| **Reset raid lockouts** | Removes raid and dungeon lockouts, except for the instance each character is in. This covers normal dungeons too. Left-click: you and every bot in your group. Shift-click: you and everyone in your group, players too. Uses `.instance unbind all` if you're a game master, otherwise `.levelsync unbindall`. Asks first, naming everyone it will reset, and prints one line with the total. |
 
 Park, Logout and inviting need you to be the group leader.
 
@@ -125,7 +126,8 @@ Under **Interface > AddOns > Playerbot Control**, or `/pbc`:
 - **Reset position**: puts the bar back in the middle of the screen.
 - **Attack also marks the target with Skull**
 - **Confirm orders in chat**: off by default. Failures are always printed, with the reason.
-- **Buttons** page: switch each button on or off. A group with no buttons left disappears.
+- **Buttons** page: switch each button on or off. A group with no buttons left disappears. **Separate
+  Autogear button** gives Autogear its own button in Upkeep, even with Maintenance switched off.
 - **Altbots** page: your name lists. They belong to the character you're playing.
 
 ### Altbots
@@ -138,11 +140,21 @@ Under **Interface > AddOns > Playerbot Control**, or `/pbc`:
 Type one name per line. Commas or spaces between names work too, capitals don't matter, and changes are
 saved as you type. A name can be on more than one list.
 
+### Bag window
+
+Right-click Sell or click Trade with one of your bots in your group targeted. The window lists the bot's
+bags; click an item to sell or trade that stack. **Refresh** reads the bags again.
+
+- **Sell** sells to the vendor the bot is standing next to. Rare and better items, and soulbound gear,
+  ask first. The bot's buyback list is shown along the bottom: click an item there to buy it back.
+- **Trade** needs the bot within trading range. The window closes with the trade; accept the trade
+  yourself when you're done.
+
 ### Key bindings
 
 Under **Key Bindings > Playerbot Control** you can set keys for Follow / Stay, Flee, Summon,
 Passive / Active, Attack my target, Careful pull, Pull and CC my target. None are set by default. A key does what a left-click
-on the button does, and works even while the bar or that button is hidden. The Group, Upkeep and Party
+on the button does, and works even while the bar or that button is hidden. The Group Actions, Upkeep and Party
 buttons have no keys on purpose: they're better used with care.
 
 | Command | What it does |
@@ -151,7 +163,7 @@ buttons have no keys on purpose: they're better used with care.
 | `/pbc toggle`, `/pbc show`, `/pbc hide` | Shows or hides the bar. |
 | `/pbc lock`, `/pbc unlock` | Locks or unlocks the bar. |
 | `/pbc reset` | Puts the bar back in the middle of the screen at normal size. |
-| `/pbc status` | Says whether mod-multibot-bridge answered. |
+| `/pbc status` | Says whether mod-multibot-bridge answered, and whether mod-levelsync and mod-token-turnin were found. |
 
 ## Requirements
 
@@ -168,7 +180,10 @@ On your client:
 - Nothing else. [MultiBot-Chatless](https://github.com/Wishmaster117/MultiBot-Chatless) isn't needed, but
   the two can run side by side: they share the bridge and ignore each other's messages.
 
-Optional, on the realm. Without them their buttons stay hidden:
+Optional, on the realm. Without them their buttons stay hidden. The addon checks for them after logging in and when
+you join a group, and remembers what it found for each realm, so the buttons show at once next time. If a
+command is turned down, the button is hidden again until a check finds the module. A button you switched
+off isn't checked.
 
 - **[mod-levelsync](https://github.com/Lichborne-AC/mod-levelsync)**: the Level sync button, and Reset
   raid lockouts for players without game master rights (needs `LevelSync.AllowRaidUnbind = 1`).
@@ -201,7 +216,7 @@ Server settings some buttons depend on, all in `playerbots.conf`:
 
 - The addon sends a message only when you click a button. After you log in it sends one hello to the
   bridge and one check each for mod-levelsync and mod-token-turnin, and hides what the server says back.
-  It never polls the server.
+  Joining a group checks again, only for a module that hasn't been found. It never polls the server.
 - Nothing runs every frame. A timer runs for a few seconds after a click, to notice an order the server
   didn't answer.
 - Orders are addon messages that the bridge takes before anyone could see them. Bots aren't whispered and
@@ -223,7 +238,8 @@ Server settings some buttons depend on, all in `playerbots.conf`:
 | 1.0.0 | Everything above, tested. The first full release. |
 | 1.0.1 | Reset raid lockouts recognises a server that lets players use dot commands but not `.instance unbind`, and falls back to mod-levelsync at once. |
 | 1.0.2 | Quick group checks every invite: it frees a bot stuck in another group (game masters), names it otherwise, and only lists bots it actually invited. |
-| **1.1.x** (now) | Careful pull and Pull, with key bindings. |
+| 1.1.x | Careful pull and Pull, with key bindings. |
+| **1.2.0** (now) | Faster Careful pull and a chosen puller; Trade and a bag window to sell single items, with buyback; module checks remembered per realm; Logout of every bot; Autogear on Maintenance, Revive on Release; Reset dungeons removed (Reset raid lockouts covers it). |
 
 ## Things to know
 
@@ -243,11 +259,11 @@ Server settings some buttons depend on, all in `playerbots.conf`:
 - **Park and the rest of the group:** the bridge has no Stay for a single bot. So Park tells the whole
   group to stay, removes the altbots, then gives everyone left the order they had before (Follow, unless
   they were staying). Random bots briefly stop, then carry on.
-- **Careful pull and Pull** use Playerbots' own tank pull, so the tank needs a ranged pull it can use
+- **Careful pull and Pull** use Playerbots' own tank pull, so the tank (or your puller) needs a ranged pull it can use
   (a gun, bow or thrown weapon, or its class's ranged pull) and Playerbots' `pull` strategy, which tanks
-  have by default. Bots set to Passive won't pull, so set them Active first. The addon asks the bridge
-  for each bot's strategy list to tell tanks and healers from damage dealers, the same way Playerbots
-  does.
+  have by default. Playerbots only lets tanks use it, so a puller must have a tank strategy. Bots set to
+  Passive won't pull, so set them Active first. The first pull asks the bridge for each member's strategy
+  list to find the tanks, the same way Playerbots does; later pulls go out at once.
 - **CC** relies on Playerbots' default crowd control marker (Moon). If you changed a bot's `rti cc`, mark
   with that one instead.
 - **Raid markers** need leader or assistant in a raid; in a party anyone can set them.
