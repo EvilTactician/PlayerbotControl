@@ -40,6 +40,13 @@ local ACKS = {
     STRATEGY_ACK     = { token = 3, counts = 5 },
 }
 
+-- Strategy lists asked for by bot name: [lower-case name] = { callbacks }
+local stateWaiting = {}
+
+-- Lists that arrive over several messages, by token:
+-- { kind = "inventory" or "buyback", items = {}, callback }
+local collecting = {}
+
 -------------------------------------------------------------------------------
 -- Helpers
 -------------------------------------------------------------------------------
@@ -255,6 +262,123 @@ function Bridge:BotStrategy(bot, state, changes, callback)
     run(function(token) return "STRATEGY~BOT~" .. encode(bot) .. "~" .. token .. "~" .. state .. "~" .. changes end, callback)
 end
 
+-- Runs a raid-icon command on one bot, such as "pull rti target".
+-- The bridge only says it passed the command on.
+function Bridge:BotRti(bot, command, callback)
+    run(function(token) return "RTI~BOT~" .. encode(bot) .. "~" .. token .. "~" .. encode(command) end, callback)
+end
+
+-- Hands a strategy answer to everyone waiting for that name.
+local function deliverState(key, combat, nonCombat)
+    local callbacks = stateWaiting[key]
+    if callbacks then
+        stateWaiting[key] = nil
+        for _, callback in ipairs(callbacks) do
+            callback(combat, nonCombat)
+        end
+    end
+end
+
+-- Framed answers being collected, by token.
+local stateFrames = {}
+
+-- Asks for one bot's strategy lists. The callback gets (combat, nonCombat)
+-- as tables of [strategy name] = true (empty for a player or someone else's
+-- bot), or nil when the bridge doesn't answer.
+-- The framed request sends one strategy per message: a bot with many
+-- strategies doesn't fit in the single-message answer, which the bridge then
+-- refuses without saying for whom.
+function Bridge:BotStrategies(bot, callback)
+    if self.status ~= "ready" then
+        callback(nil)
+        return
+    end
+    local key = string.lower(bot)
+    local waiting = stateWaiting[key]
+    if waiting then
+        waiting[#waiting + 1] = callback
+        return
+    end
+    stateWaiting[key] = { callback }
+    local token
+    if self:Supports("STATE_FRAMING_V1") then
+        token = nextToken()
+        stateFrames[token] = { key = key, combat = {}, nonCombat = {} }
+        send("GET", "STATE~" .. encode(bot) .. "~" .. token)
+    else
+        send("GET", "STATE~" .. bot)
+    end
+    PBC:After(ACK_TIMEOUT, function()
+        if token then
+            stateFrames[token] = nil
+        end
+        deliverState(key, nil)
+    end)
+end
+
+-- Logs one of your bots out by GUID, wherever it is.
+function Bridge:Logout(guid, callback)
+    run(function(token) return "BOT_DISCONNECT~" .. guid .. "~" .. token end, callback)
+end
+
+-- A bot's bags, slot by slot. The callback gets a list of
+-- { bag, slot, itemId, count, soulbound }, or nil and a reason.
+function Bridge:Bags(bot, callback)
+    if self.status ~= "ready" then
+        callback(nil, "NO_BRIDGE")
+        return
+    end
+    local token = nextToken()
+    collecting[token] = { kind = "inventory", items = {}, callback = callback }
+    send("GET", "INVENTORY_EXACT~" .. bot .. "~" .. token)
+    PBC:After(ACK_TIMEOUT, function()
+        local list = collecting[token]
+        if list then
+            collecting[token] = nil
+            list.callback(nil, "TIMEOUT")
+        end
+    end)
+end
+
+-- What a bot could buy back from the vendor. The callback gets a list of
+-- { slot, itemId, count, price }, or nil and a reason.
+function Bridge:BuybackList(bot, callback)
+    if self.status ~= "ready" then
+        callback(nil, "NO_BRIDGE")
+        return
+    end
+    local token = nextToken()
+    collecting[token] = { kind = "buyback", items = {}, callback = callback }
+    send("GET", "BUYBACK~" .. bot .. "~" .. token)
+    PBC:After(ACK_TIMEOUT, function()
+        local list = collecting[token]
+        if list then
+            collecting[token] = nil
+            list.callback(nil, "TIMEOUT")
+        end
+    end)
+end
+
+-- One stack from a bot's bags: sold to the vendor next to it, or put into the
+-- trade window it has open with you. The callback gets (ok, reason).
+function Bridge:SellItem(bot, item, callback)
+    run(function(token)
+        return "ITEM_SELL~" .. bot .. "~" .. token .. "~" .. item.bag .. "~" .. item.slot .. "~" .. item.itemId .. "~" .. item.count
+    end, callback)
+end
+
+function Bridge:TradeItem(bot, item, callback)
+    run(function(token)
+        return "ITEM_TRADE~" .. bot .. "~" .. token .. "~" .. item.bag .. "~" .. item.slot .. "~" .. item.itemId .. "~" .. item.count
+    end, callback)
+end
+
+function Bridge:BuyBack(bot, entry, callback)
+    run(function(token)
+        return "BUYBACK_ITEM~" .. bot .. "~" .. token .. "~" .. entry.slot .. "~" .. entry.itemId .. "~" .. entry.count .. "~" .. entry.price
+    end, callback)
+end
+
 -- Looks a character up by name. Only characters you may control as bots
 -- are found. The callback gets (ok, reason, guid, state, name), where state
 -- is ONLINE, OFFLINE or CONNECTING and name is spelt as the server has it.
@@ -273,7 +397,7 @@ function Bridge:LogoutFromGroup(guid, callback)
 end
 
 -- Asks which bots the bridge can see: yours, and random bots in your group.
--- The callback gets a table of [lower-case name] = true, or nil on failure.
+-- The callback gets a table of [lower-case name] = name, or nil on failure.
 local rosterCallback
 function Bridge:Roster(callback)
     if self.status ~= "ready" then
@@ -352,6 +476,94 @@ function Bridge:OnAddonMessage(prefix, message, channel, sender)
         -- token ~ status ~ reason ~ number ~ number
         local fields = split(payload, "~")
         resolve(fields[1], fields[2] == "OK", decode(fields[3] or "FAILED"), tonumber(fields[4]) or 0)
+    elseif opcode == "INVENTORY_ITEM_SELL" or opcode == "INVENTORY_ITEM_TRADE" or opcode == "BUYBACK_RESULT" then
+        -- bot ~ token ~ OK/ERR ~ reason ~ ...
+        local fields = split(payload, "~")
+        resolve(fields[2], fields[3] == "OK", decode(fields[4] or "FAILED"))
+    elseif opcode == "INV_ITEM_LOC" then
+        -- bot ~ token ~ bag ~ slot ~ item ~ count ~ soulbound
+        local fields = split(payload, "~")
+        local list = collecting[fields[2]]
+        if list then
+            list.items[#list.items + 1] = {
+                bag = tonumber(fields[3]), slot = tonumber(fields[4]), itemId = tonumber(fields[5]),
+                count = tonumber(fields[6]) or 1, soulbound = fields[7] == "1",
+            }
+        end
+    elseif opcode == "BUYBACK_ITEM" then
+        -- bot ~ token ~ slot ~ item ~ count ~ price ~ time
+        local fields = split(payload, "~")
+        local list = collecting[fields[2]]
+        if list then
+            list.items[#list.items + 1] = {
+                slot = tonumber(fields[3]), itemId = tonumber(fields[4]),
+                count = tonumber(fields[5]) or 1, price = tonumber(fields[6]) or 0,
+            }
+        end
+    elseif opcode == "INV_EXACT_END" or opcode == "BUYBACK_END" then
+        local fields = split(payload, "~")
+        local list = collecting[fields[2]]
+        if list then
+            collecting[fields[2]] = nil
+            if list.failed then
+                list.callback(nil, list.failed)
+            else
+                list.callback(list.items)
+            end
+        end
+    elseif opcode == "INV_EXACT_ERROR" then
+        local fields = split(payload, "~")
+        local list = collecting[fields[2]]
+        if list then
+            list.failed = decode(fields[3] or "FAILED")
+        end
+    elseif opcode == "RTI_ACK" then
+        -- scope ~ target ~ token ~ executed ~ command
+        local fields = split(payload, "~")
+        local executed = tonumber(fields[4]) or 0
+        resolve(fields[3], executed > 0, executed > 0 and "OK" or "NO_MATCH", executed, executed, 0)
+    elseif opcode == "STATE" then
+        -- name ~ combat strategies ~ non-combat strategies (", " between)
+        local fields = split(payload, "~")
+        local key = string.lower(fields[1] or "")
+        if stateWaiting[key] then
+            -- An empty answer is a real player: no strategies at all.
+            local combat, nonCombat = {}, {}
+            for name in string.gmatch(fields[2] or "", "[^,]+") do
+                combat[(string.gsub(name, "^%s*(.-)%s*$", "%1"))] = true
+            end
+            for name in string.gmatch(fields[3] or "", "[^,]+") do
+                nonCombat[(string.gsub(name, "^%s*(.-)%s*$", "%1"))] = true
+            end
+            deliverState(key, combat, nonCombat)
+        end
+    elseif opcode == "STATE_ITEM" then
+        -- token ~ name ~ C|N ~ index ~ strategy
+        local fields = split(payload, "~")
+        local frame = stateFrames[fields[1] or ""]
+        if frame and fields[5] then
+            local list = (fields[3] == "C") and frame.combat or frame.nonCombat
+            list[decode(fields[5])] = true
+        end
+    elseif opcode == "STATE_END" then
+        local token = string.match(payload, "^([^~]*)")
+        local frame = stateFrames[token]
+        if frame then
+            stateFrames[token] = nil
+            deliverState(frame.key, frame.combat, frame.nonCombat)
+        end
+    elseif opcode == "STATE_ABORT" then
+        -- token ~ name ~ reason. NO_BOT: a player, or a bot that isn't yours.
+        local fields = split(payload, "~")
+        local frame = stateFrames[fields[1] or ""]
+        if frame then
+            stateFrames[fields[1]] = nil
+            if decode(fields[3] or "") == "NO_BOT" then
+                deliverState(frame.key, {}, {})
+            else
+                deliverState(frame.key, nil)
+            end
+        end
     elseif opcode == "ROSTER" then
         -- name,class,level,... ; name,class,level,...
         if rosterCallback then
@@ -360,7 +572,7 @@ function Bridge:OnAddonMessage(prefix, message, channel, sender)
             for entry in string.gmatch(payload, "[^;]+") do
                 local name = string.match(entry, "^([^,]+)")
                 if name then
-                    bots[string.lower(name)] = true
+                    bots[string.lower(name)] = name
                 end
             end
             waiting(bots)

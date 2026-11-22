@@ -27,7 +27,12 @@ local buttons = {}  -- [action id] = button
 -- server module it belongs to didn't answer, or when the server has said it
 -- doesn't support what the button needs.
 local function isShown(action)
-    if PBC.db.hidden[action.id] then
+    -- A button with its own setting (Separate Autogear) shows by that alone.
+    if action.setting then
+        if not PBC.db[action.setting] then
+            return false
+        end
+    elseif PBC.db.hidden[action.id] then
         return false
     end
     if action.module and PBC.modules[action.module] ~= true then
@@ -102,7 +107,19 @@ local function showTooltip(button, build)
     else
         GameTooltip:SetOwner(button, "ANCHOR_RIGHT")
     end
-    build(GameTooltip)
+    -- Mouse commands in light blue.
+    local tooltip = setmetatable({
+        AddLine = function(_, text, r, g, b, wrap)
+            GameTooltip:AddLine(PBC:ClickLine(text), r, g, b, wrap)
+        end,
+    }, { __index = function(_, key)
+        local value = GameTooltip[key]
+        if type(value) == "function" then
+            return function(_, ...) return value(GameTooltip, ...) end
+        end
+        return value
+    end })
+    build(tooltip)
     GameTooltip:Show()
 end
 
@@ -119,9 +136,9 @@ local function actionTooltip(button)
         local group = button.flyout
         if group then
             if PBC.db.open[group.id] then
-                tooltip:AddLine("Right-click: hide the other " .. group.name .. " buttons", 1, 0.82, 0)
+                tooltip:AddLine("Right-click: hide these buttons", 1, 1, 1)
             else
-                tooltip:AddLine("Right-click: show the other " .. group.name .. " buttons", 1, 0.82, 0)
+                tooltip:AddLine("Right-click: show these buttons", 1, 1, 1)
             end
         end
     end)
@@ -158,10 +175,11 @@ local function headerTooltip(button)
     local group = button.group
     showTooltip(button, function(tooltip)
         tooltip:AddLine(group.name)
+        -- Left- and right-click both work; right-click matches the toggles.
         if PBC.db.open[group.id] then
-            tooltip:AddLine("Click: hide these buttons", 1, 1, 1)
+            tooltip:AddLine("Right-click: hide these buttons", 1, 1, 1)
         else
-            tooltip:AddLine("Click: show these buttons", 1, 1, 1)
+            tooltip:AddLine("Right-click: show these buttons", 1, 1, 1)
         end
     end)
 end

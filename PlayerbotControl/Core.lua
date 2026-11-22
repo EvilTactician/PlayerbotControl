@@ -20,7 +20,9 @@ local defaults = {
     skull = true,       -- Attack also puts the Skull marker on the target
     confirm = false,    -- print a line in chat when an order succeeds
     open = { movement = false, combat = false, group = false, upkeep = false, party = false },
+    knownModules = {},  -- [realm] = { [module] = true } found by the module check
     hidden = {},        -- [action id] = true for buttons switched off
+    separateAutogear = false, -- Autogear as its own button, not Shift-click on Maintenance
     minimap = { show = true, angle = 200 },
 }
 
@@ -33,6 +35,30 @@ local RELOAD_WINDOW = 20
 
 function PBC:Print(msg)
     DEFAULT_CHAT_FRAME:AddMessage("|cff66ccffPlayerbot Control:|r " .. tostring(msg))
+end
+
+-- Tooltip lines that start with a mouse command ("Shift-click:", "Drag:")
+-- get that command in light blue, so the commands stand out.
+local CLICK_COLOR = "|cff66ccff"
+function PBC:ClickLine(text)
+    local command, rest = string.match(text, "^([%a%-]*[Cc]lick):(.*)$")
+    if not command then
+        command, rest = string.match(text, "^(Drag):(.*)$")
+    end
+    if command then
+        return CLICK_COLOR .. command .. ":|r" .. rest
+    end
+    return text
+end
+
+-- A class-coloured name, when the class is known.
+function PBC:ClassName(name, class)
+    local color = class and RAID_CLASS_COLORS and RAID_CLASS_COLORS[class]
+    if color then
+        local function hex(v) return math.floor(v * 255 + 0.5) end
+        return string.format("|cff%02x%02x%02x%s|r", hex(color.r), hex(color.g), hex(color.b), name)
+    end
+    return name
 end
 
 -------------------------------------------------------------------------------
@@ -178,6 +204,7 @@ end
 local events = CreateFrame("Frame")
 local enteredWorld = false
 local rosterReady = false
+local wasGrouped = false
 
 events:RegisterEvent("ADDON_LOADED")
 events:RegisterEvent("PLAYER_LOGIN")
@@ -191,16 +218,22 @@ events:SetScript("OnEvent", function(self, event, ...)
     if event == "CHAT_MSG_ADDON" then
         PBC.Bridge:OnAddonMessage(...)
     elseif event == "PARTY_MEMBERS_CHANGED" or event == "RAID_ROSTER_UPDATE" then
-        -- Out of the group: nothing is known about any bots any more.
-        if rosterReady and not PBC:InGroup() then
+        local grouped = PBC:InGroup()
+        if rosterReady and not grouped then
+            -- Out of the group: nothing is known about any bots any more.
             PBC:ResetState()
+        elseif rosterReady and grouped and not wasGrouped then
+            -- Just joined a group: check again for modules not found yet.
+            PBC:ProbeModules(true)
         end
+        wasGrouped = grouped
     elseif event == "ADDON_LOADED" then
         if ... == PBC.name then
             loadSettings()
             self:UnregisterEvent("ADDON_LOADED")
         end
     elseif event == "PLAYER_LOGIN" then
+        PBC:LoadKnownModules()
         PBC.Bar:Create()
         PBC.MinimapButton:Create()
         PBC.Options:Create()
@@ -216,7 +249,8 @@ events:SetScript("OnEvent", function(self, event, ...)
             -- The group isn't known for the first moments after loading.
             PBC:After(5, function()
                 rosterReady = true
-                if not PBC:InGroup() then
+                wasGrouped = PBC:InGroup()
+                if not wasGrouped then
                     PBC:ResetState()
                 end
             end)
@@ -238,11 +272,13 @@ BINDING_NAME_PLAYERBOTCONTROL_FLEE = "Flee"
 BINDING_NAME_PLAYERBOTCONTROL_SUMMON = "Summon"
 BINDING_NAME_PLAYERBOTCONTROL_PASSIVE = "Passive / Active"
 BINDING_NAME_PLAYERBOTCONTROL_ATTACK = "Attack my target"
+BINDING_NAME_PLAYERBOTCONTROL_CAREFULPULL = "Careful pull"
+BINDING_NAME_PLAYERBOTCONTROL_PULL = "Pull"
 BINDING_NAME_PLAYERBOTCONTROL_CC = "CC my target"
 
 -- A key does what a left-click on the button does, even while the bar or the
 -- button is hidden.
-function PBC:RunBinding(id)
+function PBC:RunBinding(id, mouseButton)
     local action = self.actionById and self.actionById[id]
     if not action or not self.db then
         return
@@ -252,7 +288,7 @@ function PBC:RunBinding(id)
         self:Print(action.name .. ": " .. self.Bridge:StatusText())
         return
     end
-    action.Click("LeftButton")
+    action.Click(mouseButton or "LeftButton")
 end
 
 -------------------------------------------------------------------------------
@@ -286,7 +322,7 @@ SlashCmdList["PLAYERBOTCONTROL"] = function(input)
         PBC:Refresh()
         PBC:Print("Bar moved back to the middle of the screen at normal size.")
     elseif cmd == "status" then
-        PBC:Print("Version " .. PBC.version .. ". " .. PBC.Bridge:StatusText())
+        PBC:Print("Version " .. PBC.version .. ". " .. PBC.Bridge:StatusText() .. " Modules: " .. PBC:ModuleStatusText() .. ".")
     elseif cmd == "" or cmd == "options" or cmd == "config" then
         PBC.Options:Open()
     else

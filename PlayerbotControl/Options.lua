@@ -200,10 +200,17 @@ function Options:CreateButtonsPanel()
         local previous, count = groupLabel, 0
         for _, action in ipairs(PBC.actions) do
             if action.group == group.id then
-                local id = action.id
-                local check = addCheck(sub, action.name, nil,
-                    function() return not PBC.db.hidden[id] end,
-                    function(value) PBC.db.hidden[id] = (not value) or nil end)
+                local id, setting = action.id, action.setting
+                local check
+                if setting then
+                    check = addCheck(sub, action.optionLabel or action.name, action.optionTip,
+                        function() return PBC.db[setting] end,
+                        function(value) PBC.db[setting] = value end)
+                else
+                    check = addCheck(sub, action.name, nil,
+                        function() return not PBC.db.hidden[id] end,
+                        function(value) PBC.db.hidden[id] = (not value) or nil end)
+                end
                 check:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", 0, -4)
                 previous = check
                 count = count + 1
