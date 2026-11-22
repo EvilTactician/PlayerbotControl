@@ -107,13 +107,10 @@ local function showTooltip(button, build)
     else
         GameTooltip:SetOwner(button, "ANCHOR_RIGHT")
     end
-    -- Mouse commands in light blue, except the gold group line on the toggles.
+    -- Mouse commands in light blue.
     local tooltip = setmetatable({
         AddLine = function(_, text, r, g, b, wrap)
-            if not (r == 1 and g == 0.82 and b == 0) then
-                text = PBC:ClickLine(text)
-            end
-            GameTooltip:AddLine(text, r, g, b, wrap)
+            GameTooltip:AddLine(PBC:ClickLine(text), r, g, b, wrap)
         end,
     }, { __index = function(_, key)
         local value = GameTooltip[key]
@@ -139,9 +136,9 @@ local function actionTooltip(button)
         local group = button.flyout
         if group then
             if PBC.db.open[group.id] then
-                tooltip:AddLine("Right-click: hide the other " .. group.name .. " buttons", 1, 0.82, 0)
+                tooltip:AddLine("Right-click: hide these buttons", 1, 1, 1)
             else
-                tooltip:AddLine("Right-click: show the other " .. group.name .. " buttons", 1, 0.82, 0)
+                tooltip:AddLine("Right-click: show these buttons", 1, 1, 1)
             end
         end
     end)
@@ -178,10 +175,11 @@ local function headerTooltip(button)
     local group = button.group
     showTooltip(button, function(tooltip)
         tooltip:AddLine(group.name)
+        -- Left- and right-click both work; right-click matches the toggles.
         if PBC.db.open[group.id] then
-            tooltip:AddLine("Click: hide these buttons", 1, 1, 1)
+            tooltip:AddLine("Right-click: hide these buttons", 1, 1, 1)
         else
-            tooltip:AddLine("Click: show these buttons", 1, 1, 1)
+            tooltip:AddLine("Right-click: show these buttons", 1, 1, 1)
         end
     end)
 end

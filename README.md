@@ -1,10 +1,10 @@
-# Playerbot Control 1.2.1
+# Playerbot Control 1.2.2
 
 <div align="center">
 
 ![Interface Version](https://img.shields.io/badge/Interface-30300-blue)
 ![WoW Version](https://img.shields.io/badge/WoW-3.3.5a-orange)
-[![Version](https://img.shields.io/badge/Version-1.2.1-green)](https://github.com/EvilTactician/PlayerbotControl)
+[![Version](https://img.shields.io/badge/Version-1.2.2-green)](https://github.com/EvilTactician/PlayerbotControl)
 [![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
 
 **A World of Warcraft 3.3.5a addon with a small, clean control bar for your
@@ -50,8 +50,8 @@ The bar has one button per group.
 - **Movement** and **Combat** show their toggle on the bar. **Left-click** uses it, **Shift-click** repeats
   its current order for bots that just joined, and **right-click** shows or hides the group's other
   buttons above it.
-- **Group Actions**, **Upkeep** and **Party** have a plain group button. Click it to show or hide the group's
-  buttons.
+- **Group Actions**, **Upkeep** and **Party** have a plain group button. Right-click it (or left-click) to show or
+  hide the group's buttons, like the two toggles.
 
 Groups you leave open stay open. Anything that can't be undone asks first.
 

@@ -1715,9 +1715,9 @@ local pullAction = {
         tooltip:AddLine("Shift-click: make your targeted bot the puller (no bot targeted: every tank pulls).", 1, 1, 1, true)
         local puller = PBC.chardb.puller
         if puller then
-            tooltip:AddLine("Puller: " .. PBC:ClassName(puller, PBC.chardb.pullerClass) .. " (when in your group; it needs to count as a tank for Playerbots)", 0.7, 0.7, 0.7, true)
+            tooltip:AddLine("|cffffd100Puller:|r " .. PBC:ClassName(puller, PBC.chardb.pullerClass) .. " (has to be considered a tank by Playerbots to work)", 0.7, 0.7, 0.7, true)
         else
-            tooltip:AddLine("Puller: every tank in your group", 0.7, 0.7, 0.7, true)
+            tooltip:AddLine("|cffffd100Puller:|r every tank in your group", 0.7, 0.7, 0.7, true)
         end
     end,
     Click = function(mouseButton)
