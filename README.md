@@ -1,10 +1,10 @@
-# Playerbot Control 1.2.3
+# Playerbot Control 1.2.4
 
 <div align="center">
 
 ![Interface Version](https://img.shields.io/badge/Interface-30300-blue)
 ![WoW Version](https://img.shields.io/badge/WoW-3.3.5a-orange)
-[![Version](https://img.shields.io/badge/Version-1.2.3-green)](https://github.com/EvilTactician/PlayerbotControl)
+[![Version](https://img.shields.io/badge/Version-1.2.4-green)](https://github.com/EvilTactician/PlayerbotControl)
 [![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
 
 **A World of Warcraft 3.3.5a addon with a small, clean control bar for your
@@ -69,7 +69,7 @@ Groups you leave open stay open. Anything that can't be undone asks first.
 | --- | --- |
 | **Passive / Active** (on the bar) | Passive bots don't fight. Blue glow: passive. Red: active. |
 | **Attack my target** | Your bots attack what you have targeted. It also puts the Skull marker on it, which you can switch off in the options. |
-| **Careful pull** | Your tank pulls the target from range and brings it back to you. Left-click: careful pull. Everyone else stays where they are and holds fire, healers included, until the tank is back near you in combat; then the group fights at your spot. Stand still while it runs: you are the spot they come back to. If the tank isn't back within 20 seconds, the group is released anyway. Right-click: pull. Everyone else holds fire until the tank is in combat, then joins in from where they are. Shift-click with one of your bots targeted: that bot is your puller from now on (its name shows in its class colour), instead of every tank in the group. Shift-click with no bot targeted goes back to all tanks. The orders go out together, held first and Skull last, because Playerbots sends every bot after whatever carries the Skull. A target that already has the Skull isn't pulled. |
+| **Careful pull** | Your tank pulls the target from range and brings it back to you. Left-click: careful pull. Everyone else stays where they are and holds fire, healers included, until the tank is back near you in combat; then the group fights at your spot. Stand still while it runs: you are the spot they come back to. If the tank isn't back within 20 seconds, the group is released anyway. Right-click: pull. Everyone else holds fire until the tank is in combat, then joins in from where they are. Shift-click with one of your bots targeted: that bot is your puller from now on (its name shows in its class colour), instead of every tank in the group. Shift-click with yourself targeted makes you the puller: every bot stays where it is and holds fire, and no bot pulls. You pull, and the group is released once you're back near it in combat (left-click) or as soon as you're in combat (right-click, for quicker fights, a rogue opener or setting up CC); after 30 seconds it's released anyway. Shift-click with no bot targeted goes back to all tanks. The orders go out together, held first and Skull last, because Playerbots sends every bot after whatever carries the Skull. A target that already has the Skull isn't pulled. |
 | **CC my target** | Puts the Moon marker on your target; bots that can crowd control keep it controlled. Right-click takes the marker off. |
 
 ### Group Actions
@@ -252,7 +252,7 @@ Server settings some buttons depend on, all in `playerbots.conf`:
 | 1.0.1 | Reset raid lockouts recognises a server that lets players use dot commands but not `.instance unbind`, and falls back to mod-levelsync at once. |
 | 1.0.2 | Quick group checks every invite: it frees a bot stuck in another group (game masters), names it otherwise, and only lists bots it actually invited. |
 | 1.1.x | Careful pull and Pull, with key bindings. |
-| **1.2.x** (now) | Faster Careful pull and a chosen puller; Trade and a bag window to sell single items, with buyback; module checks remembered per realm; Logout of every bot; Autogear on Maintenance, Revive on Release; Reset dungeons removed (Reset raid lockouts covers it); bots saved before logging out and after a park or AI reset (1.2.3). |
+| **1.2.x** (now) | Faster Careful pull and a chosen puller; Trade and a bag window to sell single items, with buyback; module checks remembered per realm; Logout of every bot; Autogear on Maintenance, Revive on Release; Reset dungeons removed (Reset raid lockouts covers it); bots saved before logging out and after a park or AI reset (1.2.3); you as the puller (1.2.4). |
 
 ## Things to know
 
@@ -274,8 +274,8 @@ Server settings some buttons depend on, all in `playerbots.conf`:
   they were staying). Random bots briefly stop, then carry on.
 - **Careful pull and Pull** use Playerbots' own tank pull, so the tank (or your puller) needs a ranged pull it can use
   (a gun, bow or thrown weapon, or its class's ranged pull) and Playerbots' `pull` strategy, which tanks
-  have by default. Playerbots only lets tanks use it, so a puller must have a tank strategy. Bots set to
-  Passive won't pull, so set them Active first. The first pull asks the bridge for each member's strategy
+  have by default. Playerbots only lets tanks use it, so a bot puller must have a tank strategy; anyone
+  else can pull by making themselves the puller. Bots set to Passive won't pull, so set them Active first. The first pull asks the bridge for each member's strategy
   list to find the tanks, the same way Playerbots does; later pulls go out at once.
 - **A puller with a bow or gun walks into melee instead of shooting?** Its shooting range is Playerbots'
   default of 5 yards (whisper it `range ?` to check). Whisper it `range shoot 30`, then `co +pull`.

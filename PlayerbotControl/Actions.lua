@@ -1529,6 +1529,9 @@ add({
 --   2. then the Skull goes on, and the tanks go active and pull
 --   3. the group is released: for a careful pull once a tank is back near you
 --      in combat, for a plain pull as soon as a tank is in combat
+-- You can be the puller yourself: then the whole group stays and holds fire,
+-- and is released once you're back near it in combat (careful pull) or as
+-- soon as you're in combat (plain pull).
 -------------------------------------------------------------------------------
 
 -- Strategies that make Playerbots count a bot as a tank.
@@ -1551,6 +1554,10 @@ end
 local function findTanks(done)
     local inGroup = groupNames()
     local puller = PBC.chardb.puller
+    if puller and puller == UnitName("player") then
+        done({ puller })
+        return
+    end
     if puller and inGroup[string.lower(puller)] then
         done({ inGroup[string.lower(puller)] })
         return
@@ -1614,10 +1621,22 @@ end
 local RELEASE_DISTANCE = 3
 local CAREFUL_TIMEOUT = 20
 local PULL_TIMEOUT = 10
+local SELF_TIMEOUT = 30
 
-local function watchAndRelease(name, tanks, careful, previous)
+-- You, back near the group: any other member within release distance.
+local function nearGroup()
+    for _, member in ipairs(otherMembers()) do
+        local unit = unitFor(member)
+        if unit and CheckInteractDistance(unit, RELEASE_DISTANCE) then
+            return true
+        end
+    end
+    return false
+end
+
+local function watchAndRelease(name, tanks, careful, previous, youPull)
     local started = GetTime()
-    local timeout = careful and CAREFUL_TIMEOUT or PULL_TIMEOUT
+    local timeout = youPull and SELF_TIMEOUT or (careful and CAREFUL_TIMEOUT or PULL_TIMEOUT)
     local released = false
 
     local function release(timedOut)
@@ -1626,11 +1645,13 @@ local function watchAndRelease(name, tanks, careful, previous)
         end
         released = true
         PBC.busy.carefulpull = nil
-        if timedOut then
+        if timedOut and youPull then
+            PBC:Print(name .. ": you " .. (careful and "weren't back in combat" or "weren't in combat") .. " after " .. timeout .. " seconds, so the group is released.")
+        elseif timedOut then
             PBC:Print(name .. ": the tank " .. (careful and "wasn't back" or "hadn't pulled") .. " after " .. timeout .. " seconds, so the group is released.")
         end
         sendPassive(false, function() end)
-        if not careful or previous == "stay" then
+        if (not careful and not youPull) or previous == "stay" then
             PBC:Refresh()
             return
         end
@@ -1653,12 +1674,19 @@ local function watchAndRelease(name, tanks, careful, previous)
             release(false)
             return
         end
-        for _, tank in ipairs(tanks) do
-            local unit = unitFor(tank)
-            if unit and UnitAffectingCombat(unit)
-                and (not careful or CheckInteractDistance(unit, RELEASE_DISTANCE)) then
+        if youPull then
+            if UnitAffectingCombat("player") and (not careful or nearGroup()) then
                 release(false)
                 return
+            end
+        else
+            for _, tank in ipairs(tanks) do
+                local unit = unitFor(tank)
+                if unit and UnitAffectingCombat(unit)
+                    and (not careful or CheckInteractDistance(unit, RELEASE_DISTANCE)) then
+                    release(false)
+                    return
+                end
             end
         end
         if GetTime() - started >= timeout then
@@ -1678,31 +1706,41 @@ end
 --   3. the Skull goes on
 --   4. the tanks drop Stay (a bot on Stay won't move to pull) and Passive,
 --      and are told to pull
+-- When you're the puller, everyone Stays for both pulls and no bot is told
+-- to pull.
 local function startPull(name, tanks, careful)
     local previous = PBC.state.mode
+    local youPull = tanks[1] == UnitName("player")
     local function failed(ok, reason, matched, succeeded)
         if not ok then
             report(name, ok, reason, matched, succeeded)
         end
     end
-    if careful then
+    if careful or youPull then
         Bridge:StayOrder(failed)
     end
     sendPassive(true, failed)
     mark(SKULL)
-    local change = careful and "-stay,-passive" or "-passive"
-    for _, tank in ipairs(tanks) do
-        Bridge:BotStrategy(tank, "C", change, function() end)
-        Bridge:BotStrategy(tank, "N", change, function() end)
-        Bridge:BotRti(tank, "pull rti target", function() end)
+    if not youPull then
+        local change = careful and "-stay,-passive" or "-passive"
+        for _, tank in ipairs(tanks) do
+            Bridge:BotStrategy(tank, "C", change, function() end)
+            Bridge:BotStrategy(tank, "N", change, function() end)
+            Bridge:BotRti(tank, "pull rti target", function() end)
+        end
     end
-    watchAndRelease(name, tanks, careful, previous)
+    watchAndRelease(name, tanks, careful, previous, youPull)
 end
 
--- Shift-click: your targeted bot becomes the puller; no bot targeted clears it.
+-- Shift-click: your target becomes the puller (yourself or a bot in your
+-- group); no bot targeted clears it.
 local function setPuller()
     local target = UnitExists("target") and UnitIsPlayer("target") and UnitName("target")
-    if target and groupNames()[string.lower(target)] then
+    if target and UnitIsUnit("target", "player") then
+        PBC.chardb.puller = target
+        PBC.chardb.pullerClass = select(2, UnitClass("player"))
+        PBC:Print("Careful pull: you are the puller. Your group holds until you've pulled. Shift-click with no bot targeted to go back to all tanks.")
+    elseif target and groupNames()[string.lower(target)] then
         PBC.chardb.puller = target
         PBC.chardb.pullerClass = select(2, UnitClass("target"))
         PBC:Print("Careful pull: " .. PBC:ClassName(target, PBC.chardb.pullerClass) .. " is your puller. Shift-click with no bot targeted to go back to all tanks.")
@@ -1711,7 +1749,7 @@ local function setPuller()
         PBC.chardb.pullerClass = nil
         PBC:Print("Careful pull: no puller set; every tank in your group pulls.")
     else
-        PBC:Print("Careful pull: target one of your bots in your group to make it the puller.")
+        PBC:Print("Careful pull: target yourself or one of your bots in your group to make it the puller.")
     end
 end
 
@@ -1751,7 +1789,9 @@ local function pullClick(careful)
             PBC:Refresh()
             return
         end
-        if PBC.db.confirm then
+        if PBC.db.confirm and tanks[1] == UnitName("player") then
+            PBC:Print(name .. ": your group holds until you've pulled.")
+        elseif PBC.db.confirm then
             PBC:Print(name .. ": " .. table.concat(tanks, ", ") .. " pulling.")
         end
         startPull(name, tanks, careful)
@@ -1771,9 +1811,11 @@ local pullAction = {
         tooltip:AddLine("Your tank pulls the target from range and brings it back to you. Puts the Skull marker on it.", 1, 1, 1, true)
         tooltip:AddLine("Left-click: careful pull. Everyone else waits where they are and holds fire until the tank is back with the mob. Stand still while it runs.", 1, 1, 1, true)
         tooltip:AddLine("Right-click: pull. Everyone else holds fire until the tank has pulled, then joins in from where they are.", 1, 1, 1, true)
-        tooltip:AddLine("Shift-click: make your targeted bot the puller (no bot targeted: every tank pulls).", 1, 1, 1, true)
+        tooltip:AddLine("Shift-click: make your target the puller, yourself or a bot (no bot targeted: every tank pulls).", 1, 1, 1, true)
         local puller = PBC.chardb.puller
-        if puller then
+        if puller and puller == UnitName("player") then
+            tooltip:AddLine("|cffffd100Puller:|r you. Everyone stays and holds fire. Left-click: until you're back near them in combat. Right-click: until you're in combat.", 0.7, 0.7, 0.7, true)
+        elseif puller then
             tooltip:AddLine("|cffffd100Puller:|r " .. PBC:ClassName(puller, PBC.chardb.pullerClass) .. " (has to be considered a tank by Playerbots to work)", 0.7, 0.7, 0.7, true)
         else
             tooltip:AddLine("|cffffd100Puller:|r every tank in your group", 0.7, 0.7, 0.7, true)
