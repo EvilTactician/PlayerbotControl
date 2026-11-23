@@ -379,6 +379,59 @@ function Bridge:BuyBack(bot, entry, callback)
     end, callback)
 end
 
+-- Saves a bot's settings to the database, as they are now.
+-- Playerbots only does that at certain moments, such as a whispered strategy
+-- change. Logging a bot out through the bridge doesn't, and a reset (or
+-- parking, which resets) wipes what was saved, so a bot can come back on its
+-- defaults, its shooting range included. The bridge has no plain "save", but
+-- every change to a bot's always-loot list saves it: the Hearthstone, which
+-- never drops, goes on the list and straight off again. (Off and back on if
+-- it was there, so the list ends as it was.) The callback gets (ok, reason).
+local SAVE_ITEM = 6948
+local LOOT_RULE_LIMIT, LOOT_RULE_WINDOW = 8, 2.1 -- the bridge allows 8 per 2 seconds
+local lootRuleSent = {}
+
+local function lootRule(bot, action, callback)
+    local now = GetTime()
+    while lootRuleSent[1] and now - lootRuleSent[1] >= LOOT_RULE_WINDOW do
+        table.remove(lootRuleSent, 1)
+    end
+    if #lootRuleSent >= LOOT_RULE_LIMIT then
+        PBC:After(LOOT_RULE_WINDOW - (now - lootRuleSent[1]) + 0.05, function()
+            lootRule(bot, action, callback)
+        end)
+        return
+    end
+    lootRuleSent[#lootRuleSent + 1] = now
+    run(function(token)
+        return "LOOT_RULE_ITEM~BOT~" .. encode(bot) .. "~" .. token .. "~" .. action .. "~" .. SAVE_ITEM
+    end, callback)
+end
+
+function Bridge:SaveBot(bot, callback)
+    if not self:Supports("LOOT_RULE_ITEM_V1") then
+        callback(false, "UNSUPPORTED")
+        return
+    end
+    lootRule(bot, "ADD", function(ok, reason)
+        if not ok then
+            callback(false, reason)
+            return
+        end
+        local undo = (reason == "ALREADY_PRESENT") and { "REMOVE", "ADD" } or { "REMOVE" }
+        local function undoStep(index)
+            lootRule(bot, undo[index], function(ok2, reason2)
+                if ok2 and undo[index + 1] then
+                    undoStep(index + 1)
+                else
+                    callback(ok2, reason2)
+                end
+            end)
+        end
+        undoStep(1)
+    end)
+end
+
 -- Looks a character up by name. Only characters you may control as bots
 -- are found. The callback gets (ok, reason, guid, state, name), where state
 -- is ONLINE, OFFLINE or CONNECTING and name is spelt as the server has it.
@@ -476,6 +529,10 @@ function Bridge:OnAddonMessage(prefix, message, channel, sender)
         -- token ~ status ~ reason ~ number ~ number
         local fields = split(payload, "~")
         resolve(fields[1], fields[2] == "OK", decode(fields[3] or "FAILED"), tonumber(fields[4]) or 0)
+    elseif opcode == "LOOT_RULE_ITEM_RESULT" then
+        -- scope ~ target ~ token ~ action ~ item ~ OK/ERR ~ reason ~ matched ~ changed
+        local fields = split(payload, "~")
+        resolve(fields[3], fields[6] == "OK", decode(fields[7] or "FAILED"))
     elseif opcode == "INVENTORY_ITEM_SELL" or opcode == "INVENTORY_ITEM_TRADE" or opcode == "BUYBACK_RESULT" then
         -- bot ~ token ~ OK/ERR ~ reason ~ ...
         local fields = split(payload, "~")

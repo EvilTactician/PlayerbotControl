@@ -563,6 +563,41 @@ local function plural(count, word)
     return count .. " " .. word .. (count == 1 and "" or "s")
 end
 
+-- Saves bots' settings so they survive the next logout (see Bridge:SaveBot).
+-- Players and random bots aren't yours to save and are skipped quietly; any
+-- other failure is collected and told once, by tellUnsaved.
+local SAVE_QUIET = { NO_BOTS = true, NO_BOT = true, UNSUPPORTED = true }
+
+local function saveBot(bot, unsaved, done)
+    Bridge:SaveBot(bot, function(ok, reason)
+        if not ok and not SAVE_QUIET[reason] then
+            unsaved[#unsaved + 1] = bot .. " (" .. tostring(reason) .. ")"
+        end
+        if done then
+            done()
+        end
+    end)
+end
+
+local function tellUnsaved(name, unsaved)
+    if #unsaved > 0 then
+        PBC:Print(name .. ": couldn't save the settings of " .. table.concat(unsaved, ", ") .. ", so anything set on them by whisper, such as a shooting range, may be lost at their next logout.")
+    end
+end
+
+local function saveBots(name, names)
+    local unsaved, index = {}, 0
+    local function step()
+        index = index + 1
+        if names[index] then
+            saveBot(names[index], unsaved, step)
+        else
+            tellUnsaved(name, unsaved)
+        end
+    end
+    step()
+end
+
 -------------------------------------------------------------------------------
 -- Group
 -------------------------------------------------------------------------------
@@ -660,6 +695,9 @@ add({
                     -- Their follow and passive settings are gone with it.
                     PBC.state.mode = nil
                     PBC.state.passive = nil
+                    -- The reset wiped what was saved for them; save them again
+                    -- as they are now, so they don't lose more at logout.
+                    saveBots("Reset AI", otherMembers())
                 end)
             end)
     end,
@@ -1237,17 +1275,28 @@ add({
         local function stayOn(name, state, done)
             Bridge:BotStrategy(name, state, "+stay,-follow", done)
         end
-        local failed = {}
+        -- Leaving the group also wiped what was saved for them, so each is
+        -- saved again once Stay is back on.
+        local failed, unsaved, finished = {}, {}, 0
+        local function finishOne()
+            finished = finished + 1
+            if finished == #names then
+                if #failed > 0 then
+                    PBC:Print("Park altbots: couldn't make sure these stay put: " .. table.concat(failed, ", ") .. ".")
+                end
+                tellUnsaved("Park altbots", unsaved)
+            end
+        end
         for index, name in ipairs(names) do
             PBC:After(PARK_RECHECK + (index - 1) * 0.3, function()
                 stayOn(name, "N", function(ok, reason)
                     if not ok then
                         failed[#failed + 1] = name .. " (" .. tostring(reason) .. ")"
+                        finishOne()
                     else
-                        stayOn(name, "C", function() end)
-                    end
-                    if index == #names and #failed > 0 then
-                        PBC:Print("Park altbots: couldn't make sure these stay put: " .. table.concat(failed, ", ") .. ".")
+                        stayOn(name, "C", function()
+                            saveBot(name, unsaved, finishOne)
+                        end)
                     end
                 end)
             end)
@@ -1306,6 +1355,7 @@ local function logoutEveryBot()
                     "Log out",
                     function()
                         local inGroup = groupNames()
+                        local unsaved = {}
                         runBatch("logout", "Logout altbots", 0.1, { BOT_NOT_ONLINE = true }, {
                                 FORBIDDEN        = "only the group leader can remove them from your group",
                                 TARGET_IS_LEADER = "is the group leader, so can't be removed",
@@ -1313,11 +1363,14 @@ local function logoutEveryBot()
                             function(botName, done)
                                 for _, bot in ipairs(online) do
                                     if bot.name == botName then
-                                        if inGroup[string.lower(botName)] then
-                                            Bridge:LogoutFromGroup(bot.guid, done)
-                                        else
-                                            Bridge:Logout(bot.guid, done)
-                                        end
+                                        -- Saved first: logging out doesn't save them.
+                                        saveBot(botName, unsaved, function()
+                                            if inGroup[string.lower(botName)] then
+                                                Bridge:LogoutFromGroup(bot.guid, done)
+                                            else
+                                                Bridge:Logout(bot.guid, done)
+                                            end
+                                        end)
                                         return
                                     end
                                 end
@@ -1327,6 +1380,7 @@ local function logoutEveryBot()
                                 if result.bots > 0 then
                                     PBC:Print("Logout altbots: " .. plural(result.bots, "bot") .. " logged out.")
                                 end
+                                tellUnsaved("Logout altbots", unsaved)
                             end,
                             list)
                     end)
@@ -1375,6 +1429,7 @@ add({
                 if PBC.busy.logout then
                     return
                 end
+                local unsaved = {}
                 runBatch("logout", "Logout altbots", 0.1, nil, {
                         FORBIDDEN        = "only the group leader can remove them",
                         TARGET_IS_LEADER = "is the group leader, so can't be removed",
@@ -1388,13 +1443,17 @@ add({
                                 done(false, reason)
                                 return
                             end
-                            Bridge:LogoutFromGroup(guid, done)
+                            -- Saved first: logging out doesn't save them.
+                            saveBot(bot, unsaved, function()
+                                Bridge:LogoutFromGroup(guid, done)
+                            end)
                         end)
                     end,
                     function(result)
                         if result.bots > 0 then
                             PBC:Print("Logout altbots: " .. plural(result.bots, "altbot") .. " logged out.")
                         end
+                        tellUnsaved("Logout altbots", unsaved)
                     end,
                     names)
             end)
