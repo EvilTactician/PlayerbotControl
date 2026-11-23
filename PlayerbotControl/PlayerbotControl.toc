@@ -2,7 +2,7 @@
 ## Title: Playerbot Control
 ## Notes: A small, movable control bar for your playerbots: follow or stay, passive or active, attack, crowd control, summon, flee, group and upkeep orders, and your altbots. Orders go through mod-multibot-bridge, so nothing is typed into chat. /pbc opens the options.
 ## Author: EvilTactician
-## Version: 1.2.3
+## Version: 1.2.4
 ## SavedVariables: PlayerbotControlDB
 ## SavedVariablesPerCharacter: PlayerbotControlCharDB
 
